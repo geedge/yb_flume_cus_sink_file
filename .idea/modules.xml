@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="ProjectModuleManager">
+    <modules>
+      <module fileurl="file://$PROJECT_DIR$/yb_flume_cus_sink_file.iml" filepath="$PROJECT_DIR$/yb_flume_cus_sink_file.iml" />
+      <module fileurl="file://$PROJECT_DIR$/yb_http_avro_sink_file/yb_http_avro_sink_file.iml" filepath="$PROJECT_DIR$/yb_http_avro_sink_file/yb_http_avro_sink_file.iml" />
+    </modules>
+  </component>
+</project>
