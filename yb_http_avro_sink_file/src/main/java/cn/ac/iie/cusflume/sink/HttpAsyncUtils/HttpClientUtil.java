@@ -827,7 +827,8 @@ public class HttpClientUtil {
             // set header
             httpPost.addHeader("User-Agent", userAgent);
 
-            httpPost.setHeader(HTTP.CONN_DIRECTIVE, HTTP.CONN_CLOSE);//关闭长连接-20191225新增-使用字符代替
+//            httpPost.setHeader(HTTP.CONN_DIRECTIVE, HTTP.CONN_CLOSE);//关闭长连接-20191225新增-使用字符代替
+            httpPost.setHeader(HTTP.CONN_DIRECTIVE, HTTP.CONN_KEEP_ALIVE);//打开长连接-20201017修改-使用字符代替
             //一部状态回传需要此Cookie打开
 //            if ("monitor-msg".equals(topic)) {
 //                httpPost.addHeader("Cookie", msgSessionCookie);//广东文件消息测试时加上Cookie会验证不通过,即那边显示为两个Cookie,不加Cookie则验证通过
