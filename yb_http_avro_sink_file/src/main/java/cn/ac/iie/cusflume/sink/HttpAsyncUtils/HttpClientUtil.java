@@ -778,7 +778,8 @@ public class HttpClientUtil {
      * @param msgSessionCookie
      * @return
      */
-    public static void asyncProducerAvroToZX(String urlProducer, String topic, String dataJson, String userAgent, String msgSessionCookie, int count) {
+//    public static void asyncProducerAvroToZX(String urlProducer, String topic, String dataJson, String userAgent, String msgSessionCookie, int count) {//20201018注释掉
+    public static void asyncProducerAvroToZX(String urlProducer, String topic, String dataJson, String userAgent, String msgSessionCookie, int count, long postTime) {//20201018-新增发送时间
         HttpPost httpPost = null;
         urlProducer = urlProducer.trim();
         byte[] resultArray = null;
@@ -868,11 +869,13 @@ public class HttpClientUtil {
 //            logger.debug("封装数据==>" + dataJson + "<==最终加载内容字节数组长度: " + resultArray.length);//20200428进一步细化日志
             logger.debug("原始数据==>" + dataJson + "<==," +
                     "原始数据checksum==>" + MD5Utils.md5Encode(dataJson) + "<==," +
+                    "数据处理时间handleTime==>" + (System.currentTimeMillis() - postTime) + "<==," +
                     "最终加载内容字节数组长度: " + resultArray.length + "," +
                     "最终加载内容字节数组:" + Arrays.toString(resultArray));//20200521进一步细化日志
 
             //执行请求
-            AsyncPostMsgCallBack asyncPostMsgCallBack = new AsyncPostMsgCallBack(urlProducer, topic, dataJson, userAgent, msgSessionCookie, count);
+//            AsyncPostMsgCallBack asyncPostMsgCallBack = new AsyncPostMsgCallBack(urlProducer, topic, dataJson, userAgent, msgSessionCookie, count);
+            AsyncPostMsgCallBack asyncPostMsgCallBack = new AsyncPostMsgCallBack(urlProducer, topic, dataJson, userAgent, msgSessionCookie, count, postTime);//20201018新增发送时间
             httpClient.execute(httpPost, asyncPostMsgCallBack);
 
         } catch (MalformedURLException e) {

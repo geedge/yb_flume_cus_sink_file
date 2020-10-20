@@ -57,7 +57,8 @@ public class AvroMonitorTimerTask {
                     if ("yb".equals(RealtimeCountConfig.MONITOR_TYPE)) {//只有当类型为一部(yb)时才进行状态上报
                         String sendMsg = getJson(RealtimeCountConfig.MONITOR_SYSTEM_COMPONENT_CODE, RealtimeCountConfig.MONITOR_SYSTEM_COMPONENT_CODE_FLUME, topicType);//新版-20200428
                         logger.info("Send monitor message is===>>>" + sendMsg + "<<<===");
-                        HttpClientUtil.asyncProducerAvroToZX(postMonitorUrl, monitorCategory, sendMsg, userAgent, monitorSessionCookie, 0);//静态方法无返回值用于多线程,初始发送count计数为0
+//                        HttpClientUtil.asyncProducerAvroToZX(postMonitorUrl, monitorCategory, sendMsg, userAgent, monitorSessionCookie, 0);//静态方法无返回值用于多线程,初始发送count计数为0
+                        HttpClientUtil.asyncProducerAvroToZX(postMonitorUrl, monitorCategory, sendMsg, userAgent, monitorSessionCookie, 0, System.currentTimeMillis());//静态方法无返回值用于多线程,初始发送count计数为0//20201018新增发送时间
                     }
                 } catch (Exception e) {
                     logger.error("Send monitorMsg to zx is error===>>>" + e + "<===");
@@ -74,11 +75,14 @@ public class AvroMonitorTimerTask {
                 //发送消息统计情况-warn类型便于脚本收集信息打印
                 logger.warn("last min " + lastMinTime + " monitorMsg count==>msgSuccessSum:{ " + msgSuccessSum + " },==>msgFailedSum:{ " + msgFailedSum + " },==>msgReadyPostSum:{ " + msgReadyPostSum + " },==>msgTotalSum:{ " + msgTotalSum + " }.");
 //                }
-                //重置为0
-                msgSuccessSum = 0;
-                msgFailedSum = 0;
-                msgTotalSum = 0;
-                msgReadyPostSum = 0;
+
+                if (RealtimeCountConfig.MONITOR_CLEAN_TYPE == 1) {//1表示定时重置
+                    //重置为0
+                    msgSuccessSum = 0;
+                    msgFailedSum = 0;
+                    msgTotalSum = 0;
+                    msgReadyPostSum = 0;
+                }
             }
         }, 60000, 60000);
     }

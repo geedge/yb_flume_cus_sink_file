@@ -1,8 +1,7 @@
 package cn.ac.iie.cusflume.sink.HttpAsyncUtils;
 
 import cn.ac.iie.cusflume.sink.daoUtils.RealtimeCountConfig;
-import org.apache.http.Consts;
-import org.apache.http.HttpHost;
+import org.apache.http.*;
 import org.apache.http.auth.AuthSchemeProvider;
 import org.apache.http.auth.AuthScope;
 import org.apache.http.auth.MalformedChallengeException;
@@ -14,9 +13,9 @@ import org.apache.http.config.ConnectionConfig;
 import org.apache.http.config.Lookup;
 import org.apache.http.config.Registry;
 import org.apache.http.config.RegistryBuilder;
+import org.apache.http.conn.ConnectionKeepAliveStrategy;
 import org.apache.http.conn.ssl.NoopHostnameVerifier;
 import org.apache.http.conn.ssl.SSLConnectionSocketFactory;
-import org.apache.http.conn.ssl.SSLContexts;
 import org.apache.http.impl.auth.*;
 import org.apache.http.impl.client.BasicCookieStore;
 import org.apache.http.impl.client.BasicCredentialsProvider;
@@ -25,11 +24,14 @@ import org.apache.http.impl.nio.client.HttpAsyncClients;
 import org.apache.http.impl.nio.conn.PoolingNHttpClientConnectionManager;
 import org.apache.http.impl.nio.reactor.DefaultConnectingIOReactor;
 import org.apache.http.impl.nio.reactor.IOReactorConfig;
+import org.apache.http.message.BasicHeaderElementIterator;
 import org.apache.http.nio.conn.NoopIOSessionStrategy;
 import org.apache.http.nio.conn.SchemeIOSessionStrategy;
 import org.apache.http.nio.conn.ssl.SSLIOSessionStrategy;
 import org.apache.http.nio.reactor.ConnectingIOReactor;
 import org.apache.http.nio.reactor.IOReactorException;
+import org.apache.http.protocol.HTTP;
+import org.apache.http.protocol.HttpContext;
 
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.TrustManager;
@@ -101,7 +103,9 @@ public class HttpAsyncClient {
         RequestConfig requestConfig = RequestConfig.custom()
                 .setConnectionRequestTimeout(connectionRequestTimeout)
                 .setConnectTimeout(connectTimeout)
-                .setSocketTimeout(socketTimeout).build();
+                .setSocketTimeout(socketTimeout)
+                .setStaleConnectionCheckEnabled(true)//逐出已被关闭的链接-20201017
+                .build();
 
         SSLContext sslcontext = SSLContext.getInstance(SSLConnectionSocketFactory.TLS);
         X509TrustManager tm = new X509TrustManager() {
@@ -135,7 +139,10 @@ public class HttpAsyncClient {
                 .build();
 
         // 配置io线程
-        IOReactorConfig ioReactorConfig = IOReactorConfig.custom().setSoKeepAlive(false).setTcpNoDelay(true)
+        IOReactorConfig ioReactorConfig = IOReactorConfig.custom()
+//                .setSoKeepAlive(false)//20201017移除
+                .setSoKeepAlive(true)//20201017新修改
+                .setTcpNoDelay(true)
                 .setIoThreadCount(Runtime.getRuntime().availableProcessors())
                 .build();
         // 设置连接池大小
@@ -169,18 +176,43 @@ public class HttpAsyncClient {
                 .build();
         conMgr.setDefaultConnectionConfig(connectionConfig);
 
+        /**
+         * 定义一个strategy-keep-alive-20201017
+         */
+        ConnectionKeepAliveStrategy kaStrategy = new ConnectionKeepAliveStrategy() {
+            @Override
+            public long getKeepAliveDuration(HttpResponse response, HttpContext context) {
+                HeaderElementIterator it = new BasicHeaderElementIterator
+                        (response.headerIterator(HTTP.CONN_KEEP_ALIVE));
+                while (it.hasNext()) {
+                    HeaderElement he = it.nextElement();
+                    String param = he.getName();
+                    String value = he.getValue();
+                    if (value != null && param.equalsIgnoreCase
+                            ("timeout")) {
+                        return Long.parseLong(value) * 1000;
+                    }
+                }
+                return 10 * 1000;//如果没有约定，则默认定义时长为10s
+            }
+        };
+
         if (proxy) {
             return HttpAsyncClients.custom().setConnectionManager(conMgr)
                     .setDefaultCredentialsProvider(credentialsProvider)
                     .setDefaultAuthSchemeRegistry(authSchemeRegistry)
                     .setProxy(new HttpHost(host, port))
                     .setDefaultCookieStore(new BasicCookieStore())
-                    .setDefaultRequestConfig(requestConfig).build();
+                    .setDefaultRequestConfig(requestConfig)
+                    .setKeepAliveStrategy(kaStrategy)//增加keep-alive配置-20201017
+                    .build();
         } else {
             return HttpAsyncClients.custom().setConnectionManager(conMgr)
                     .setDefaultCredentialsProvider(credentialsProvider)
                     .setDefaultAuthSchemeRegistry(authSchemeRegistry)
-                    .setDefaultCookieStore(new BasicCookieStore()).build();
+                    .setDefaultCookieStore(new BasicCookieStore())
+                    .setKeepAliveStrategy(kaStrategy)//增加keep-alive配置-20201017
+                    .build();
         }
 
     }

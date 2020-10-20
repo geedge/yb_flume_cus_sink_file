@@ -34,6 +34,7 @@ public class RealtimeCountConfig implements Serializable {
      * 监控器类型:一部(yb):状态上报;广东(gd):日志打印,然后靠脚本收集到influxdb上传(外部脚本完成)
      */
     public static final String MONITOR_TYPE = RealtimeCountConfigurations.getStringProperty(0, "monitor.type");
+    public static final Integer MONITOR_CLEAN_TYPE = RealtimeCountConfigurations.getIntProperty(0, "monitor.clean.type");
 
     /**
      * 状态上报所需参数-仅一部-系统组件编码-目前24832-20191222

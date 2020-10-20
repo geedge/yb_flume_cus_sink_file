@@ -14,6 +14,7 @@ import org.apache.http.concurrent.FutureCallback;
 import org.apache.http.util.EntityUtils;
 import org.apache.log4j.Logger;
 
+import java.io.IOException;
 import java.util.Arrays;
 import java.util.Map;
 
@@ -29,14 +30,17 @@ public class AsyncPostMsgCallBack implements FutureCallback<HttpResponse> {
     private String userAgent;
     private String msgSessionCookie;
     private int count;
+    private long postTime;//20201018新增发送时间
 
-    public AsyncPostMsgCallBack(String postMsgUrl, String topicName, String dataJson, String userAgent, String msgSessionCookie, int count) {
+    //    public AsyncPostMsgCallBack(String postMsgUrl, String topicName, String dataJson, String userAgent, String msgSessionCookie, int count) {
+    public AsyncPostMsgCallBack(String postMsgUrl, String topicName, String dataJson, String userAgent, String msgSessionCookie, int count, long postTime) {//20201018新增发送时间
         this.postMsgUrl = postMsgUrl;
         this.topicName = topicName;
         this.dataJson = dataJson;
         this.userAgent = userAgent;
         this.msgSessionCookie = msgSessionCookie;
         this.count = count;
+        this.postTime = postTime;
     }
 
     public String getPostMsgUrl() {
@@ -87,6 +91,14 @@ public class AsyncPostMsgCallBack implements FutureCallback<HttpResponse> {
         this.count = count;
     }
 
+    public long getPostTime() {
+        return postTime;
+    }
+
+    public void setPostTime(long postTime) {
+        this.postTime = postTime;
+    }
+
     /**
      * 请求完成后调用该函数
      */
@@ -96,14 +108,21 @@ public class AsyncPostMsgCallBack implements FutureCallback<HttpResponse> {
         try {
             int statuCode = response.getStatusLine().getStatusCode();
             HttpEntity entity = response.getEntity();
-            String ret = EntityUtils.toString(entity);
+            String ret = null;
+            if (entity != null) {
+//                ret = EntityUtils.toString(entity);//旧-20201018移除
+                ret = EntityUtils.toString(entity, "UTF-8");//20201018新增修改，添加UTF-8
+            }
             logger.info("返回的生产原始响应体String数据为:" + ret);
 
             /**
              * 不直接进行对象转换，除非数据加载不成功
              */
             Map map = JSONObject.parseObject(ret, Map.class);
-            int resRedirBodyCode = (int) map.get("code");
+            int resRedirBodyCode = 0;
+            if (map != null) {
+                resRedirBodyCode = (int) map.get("code");
+            }
 //            int resRedirBodyCode = resRedirBody.getCode();
 
             logger.debug("生产数据==>" + dataJson + "<==," +
@@ -116,10 +135,11 @@ public class AsyncPostMsgCallBack implements FutureCallback<HttpResponse> {
                 logger.info("数据加载成功,返回码: " + statuCode);
                 logger.debug("生产数据==>" + dataJson + "<==," +
                         "生产数据checksum==>" + MD5Utils.md5Encode(dataJson) + "<==," +
+                        "服务端响应时间responseTime==>" + (System.currentTimeMillis() - postTime) + "<==," +
                         "数据加载成功,返回码: " + statuCode);
 
                 AvroMonitorTimerTask.msgSuccessSum++;
-                EntityUtils.consume(entity);
+//                EntityUtils.consume(entity);
             } else {
                 switch (resRedirBodyCode) {
                     case 300:
@@ -155,15 +175,23 @@ public class AsyncPostMsgCallBack implements FutureCallback<HttpResponse> {
                         AvroMonitorTimerTask.msgFailedSum++;
                         break;
                 }
-                EntityUtils.consume(entity);
+//                EntityUtils.consume(entity);
+            }
+
+            if (entity != null) {
+                try {
+                    EntityUtils.consume(entity);//20201018移到外部
+                } catch (final IOException ex) {
+                }
             }
 
         } catch (Exception e) {
             logger.error("AsyncPostMsgCallBack Get response from ZX is error===>>>" + e.getMessage() + "<<<===Message is==>" + dataJson + "<==");//细化日志
             e.printStackTrace();
+        } finally {
+            HttpClientUtils.closeQuietly(response);//20201018移入finally
+//            EntityUtils.consumeQuietly(response.getEntity());
         }
-
-        HttpClientUtils.closeQuietly(response);
     }
 
     /**
@@ -185,7 +213,8 @@ public class AsyncPostMsgCallBack implements FutureCallback<HttpResponse> {
             AvroMonitorTimerTask.msgFailedSum++;
             logger.error("dataJson:" + dataJson + " send failed finally,error:" + e.toString());
         } else {
-            HttpClientUtil.asyncProducerAvroToZX(postMsgUrl, topicName, dataJson, userAgent, msgSessionCookie, count);//failed失败时重试
+//            HttpClientUtil.asyncProducerAvroToZX(postMsgUrl, topicName, dataJson, userAgent, msgSessionCookie, count);//failed失败时重试
+            HttpClientUtil.asyncProducerAvroToZX(postMsgUrl, topicName, dataJson, userAgent, msgSessionCookie, count, System.currentTimeMillis());//failed失败时重试//20201018新增发送时间
         }
     }
 

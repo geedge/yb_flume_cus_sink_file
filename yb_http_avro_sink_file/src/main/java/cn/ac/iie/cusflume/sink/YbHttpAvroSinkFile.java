@@ -346,7 +346,8 @@ public class YbHttpAvroSinkFile extends AbstractSink implements Configurable {
 
                 AvroMonitorTimerTask.msgReadyPostSum += contents.size();
                 for (String content : contents) {
-                    HttpClientUtil.asyncProducerAvroToZX(postMsgUrl, topicName, content, userAgent, msgSessionCookie, 0);//初始发送count计数为0
+//                    HttpClientUtil.asyncProducerAvroToZX(postMsgUrl, topicName, content, userAgent, msgSessionCookie, 0);//初始发送count计数为0
+                    HttpClientUtil.asyncProducerAvroToZX(postMsgUrl, topicName, content, userAgent, msgSessionCookie, 0, System.currentTimeMillis());//初始发送count计数为0//20201018新增发送时间
                 }
             } else {//sessionCookie不为空
                 logger.info("AC msg sessionId already exists,msg sessionId is ===>" + msgSessionCookie);
@@ -356,7 +357,8 @@ public class YbHttpAvroSinkFile extends AbstractSink implements Configurable {
                         @Override
                         public void run() {
                             try {
-                                HttpClientUtil.asyncProducerAvroToZX(postMsgUrl, topicName, content, userAgent, msgSessionCookie, 0);//初始发送count计数为0
+//                                HttpClientUtil.asyncProducerAvroToZX(postMsgUrl, topicName, content, userAgent, msgSessionCookie, 0);//初始发送count计数为0
+                                HttpClientUtil.asyncProducerAvroToZX(postMsgUrl, topicName, content, userAgent, msgSessionCookie, 0, System.currentTimeMillis());//初始发送count计数为0//20201018新增发送时间
                             } catch (Exception e) {
                                 logger.error("sendMsgLog multi-thread is error==>" + e + "<==,Thread is==>" + Thread.currentThread().getName() + "<==.");
                             }
@@ -420,7 +422,8 @@ public class YbHttpAvroSinkFile extends AbstractSink implements Configurable {
                         redirectContents.clear();
                         AvroMonitorTimerTask.msgReadyPostSum += tmpListFreq.size();
                         for (String content : tmpListFreq) {
-                            HttpClientUtil.asyncProducerAvroToZX(postMsgUrl, topicName, content, userAgent, msgSessionCookie, 0);//postRedirectDataEveryMin定时器-初始发送count计数为0
+//                            HttpClientUtil.asyncProducerAvroToZX(postMsgUrl, topicName, content, userAgent, msgSessionCookie, 0);//postRedirectDataEveryMin定时器-初始发送count计数为0
+                            HttpClientUtil.asyncProducerAvroToZX(postMsgUrl, topicName, content, userAgent, msgSessionCookie, 0, System.currentTimeMillis());//postRedirectDataEveryMin定时器-初始发送count计数为0//20201018新增发送时间
                         }
                         logger.info("PostRedirectDataEveryMin post to zx RedirectData size==>" + tmpListFreq.size() + "<==.");
                     }
