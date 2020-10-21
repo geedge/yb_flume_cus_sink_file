@@ -30,7 +30,7 @@
      到达/home/mesasoft/apache-flume-1.9.0-bin/plugins.d/cusflumejar/lib路径下
 
      ```
-     #进入目录
+     #进入/home/mesasoft/apache-flume-1.9.0-bin/plugins.d/cusflumejar/lib目录
      cd /home/mesasoft/apache-flume-1.9.0-bin/plugins.d/cusflumejar/lib
      
      #备份旧文件（cus-sink-https-avro-file-log-monitor-yb-debug-开头并且.jar结尾）到上级目录（或者自己创建特定文件夹保存旧版本,但不能存放在lib下）
@@ -50,4 +50,5 @@
      #启动指令示例,进程数根据实际需要修改,需要结合kafka分区数考虑
      ./clean_start_all.sh 1 50000
      ```
-
+  
+  2. flume存在多台机器时,每台flume机器都需执行上述操作
