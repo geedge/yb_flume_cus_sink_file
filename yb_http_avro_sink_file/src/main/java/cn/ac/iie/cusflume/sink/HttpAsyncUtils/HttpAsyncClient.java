@@ -49,13 +49,6 @@ import java.security.cert.X509Certificate;
  */
 public class HttpAsyncClient {
 
-    /*
-        private static int socketTimeout = 60000;//设置等待数据超时时间60秒钟 根据业务调整
-        private static int connectTimeout = 60000;//连接超时
-        private static int poolSize = 5000;//连接池最大连接数
-        private static int maxPerRoute = 2500;//每个主机的并发最多只有1500
-        private static int connectionRequestTimeout = 90000; //从连接池中后去连接的timeout时间
-    */
     private static int socketTimeout = RealtimeCountConfig.HTTP_ASYNC_SOCKETTIMEOUT;//设置等待数据超时时间60秒钟 根据业务调整
     private static int connectTimeout = RealtimeCountConfig.HTTP_ASYNC_CONNECTTIMEOUT;//连接超时
     private static int poolSize = RealtimeCountConfig.HTTP_ASYNC_POOLSIZE;//连接池最大连接数
@@ -85,7 +78,7 @@ public class HttpAsyncClient {
     }
 
     /**
-     * 新版createAsyncClient(boolean proxy)---20200425注释
+     * 新版createAsyncClient(boolean proxy)
      * @param proxy
      * @return
      * @throws KeyManagementException
@@ -104,7 +97,7 @@ public class HttpAsyncClient {
                 .setConnectionRequestTimeout(connectionRequestTimeout)
                 .setConnectTimeout(connectTimeout)
                 .setSocketTimeout(socketTimeout)
-                .setStaleConnectionCheckEnabled(true)//逐出已被关闭的链接-20201017
+                .setStaleConnectionCheckEnabled(true)
                 .build();
 
         SSLContext sslcontext = SSLContext.getInstance(SSLConnectionSocketFactory.TLS);
@@ -140,8 +133,7 @@ public class HttpAsyncClient {
 
         // 配置io线程
         IOReactorConfig ioReactorConfig = IOReactorConfig.custom()
-//                .setSoKeepAlive(false)//20201017移除
-                .setSoKeepAlive(true)//20201017新修改
+                .setSoKeepAlive(true)
                 .setTcpNoDelay(true)
                 .setIoThreadCount(Runtime.getRuntime().availableProcessors())
                 .build();
@@ -177,7 +169,7 @@ public class HttpAsyncClient {
         conMgr.setDefaultConnectionConfig(connectionConfig);
 
         /**
-         * 定义一个strategy-keep-alive-20201017
+         * 定义一个strategy
          */
         ConnectionKeepAliveStrategy kaStrategy = new ConnectionKeepAliveStrategy() {
             @Override
@@ -204,14 +196,14 @@ public class HttpAsyncClient {
                     .setProxy(new HttpHost(host, port))
                     .setDefaultCookieStore(new BasicCookieStore())
                     .setDefaultRequestConfig(requestConfig)
-                    .setKeepAliveStrategy(kaStrategy)//增加keep-alive配置-20201017
+                    .setKeepAliveStrategy(kaStrategy)
                     .build();
         } else {
             return HttpAsyncClients.custom().setConnectionManager(conMgr)
                     .setDefaultCredentialsProvider(credentialsProvider)
                     .setDefaultAuthSchemeRegistry(authSchemeRegistry)
                     .setDefaultCookieStore(new BasicCookieStore())
-                    .setKeepAliveStrategy(kaStrategy)//增加keep-alive配置-20201017
+                    .setKeepAliveStrategy(kaStrategy)
                     .build();
         }
 

@@ -778,8 +778,7 @@ public class HttpClientUtil {
      * @param msgSessionCookie
      * @return
      */
-//    public static void asyncProducerAvroToZX(String urlProducer, String topic, String dataJson, String userAgent, String msgSessionCookie, int count) {//20201018注释掉
-    public static void asyncProducerAvroToZX(String urlProducer, String topic, String dataJson, String userAgent, String msgSessionCookie, int count, long postTime) {//20201018-新增发送时间
+    public static void asyncProducerAvroToZX(String urlProducer, String topic, String dataJson, String userAgent, String msgSessionCookie, int count, long postTime) {
         HttpPost httpPost = null;
         urlProducer = urlProducer.trim();
         byte[] resultArray = null;
@@ -828,8 +827,8 @@ public class HttpClientUtil {
             // set header
             httpPost.addHeader("User-Agent", userAgent);
 
-//            httpPost.setHeader(HTTP.CONN_DIRECTIVE, HTTP.CONN_CLOSE);//关闭长连接-20191225新增-使用字符代替
-            httpPost.setHeader(HTTP.CONN_DIRECTIVE, HTTP.CONN_KEEP_ALIVE);//打开长连接-20201017修改-使用字符代替
+//            httpPost.setHeader(HTTP.CONN_DIRECTIVE, HTTP.CONN_CLOSE);//关闭长连接
+            httpPost.setHeader(HTTP.CONN_DIRECTIVE, HTTP.CONN_KEEP_ALIVE);//打开长连接
             //一部状态回传需要此Cookie打开
 //            if ("monitor-msg".equals(topic)) {
 //                httpPost.addHeader("Cookie", msgSessionCookie);//广东文件消息测试时加上Cookie会验证不通过,即那边显示为两个Cookie,不加Cookie则验证通过
@@ -874,8 +873,7 @@ public class HttpClientUtil {
                     "最终加载内容字节数组:" + Arrays.toString(resultArray));//20200521进一步细化日志
 
             //执行请求
-//            AsyncPostMsgCallBack asyncPostMsgCallBack = new AsyncPostMsgCallBack(urlProducer, topic, dataJson, userAgent, msgSessionCookie, count);
-            AsyncPostMsgCallBack asyncPostMsgCallBack = new AsyncPostMsgCallBack(urlProducer, topic, dataJson, userAgent, msgSessionCookie, count, postTime);//20201018新增发送时间
+            AsyncPostMsgCallBack asyncPostMsgCallBack = new AsyncPostMsgCallBack(urlProducer, topic, dataJson, userAgent, msgSessionCookie, count, postTime);
             httpClient.execute(httpPost, asyncPostMsgCallBack);
 
         } catch (MalformedURLException e) {

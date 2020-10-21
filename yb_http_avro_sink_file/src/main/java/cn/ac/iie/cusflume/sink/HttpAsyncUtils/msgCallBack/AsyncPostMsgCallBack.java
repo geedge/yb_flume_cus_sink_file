@@ -30,10 +30,9 @@ public class AsyncPostMsgCallBack implements FutureCallback<HttpResponse> {
     private String userAgent;
     private String msgSessionCookie;
     private int count;
-    private long postTime;//20201018新增发送时间
+    private long postTime;
 
-    //    public AsyncPostMsgCallBack(String postMsgUrl, String topicName, String dataJson, String userAgent, String msgSessionCookie, int count) {
-    public AsyncPostMsgCallBack(String postMsgUrl, String topicName, String dataJson, String userAgent, String msgSessionCookie, int count, long postTime) {//20201018新增发送时间
+    public AsyncPostMsgCallBack(String postMsgUrl, String topicName, String dataJson, String userAgent, String msgSessionCookie, int count, long postTime) {
         this.postMsgUrl = postMsgUrl;
         this.topicName = topicName;
         this.dataJson = dataJson;
@@ -110,8 +109,7 @@ public class AsyncPostMsgCallBack implements FutureCallback<HttpResponse> {
             HttpEntity entity = response.getEntity();
             String ret = null;
             if (entity != null) {
-//                ret = EntityUtils.toString(entity);//旧-20201018移除
-                ret = EntityUtils.toString(entity, "UTF-8");//20201018新增修改，添加UTF-8
+                ret = EntityUtils.toString(entity, "UTF-8");
             }
             logger.info("返回的生产原始响应体String数据为:" + ret);
 
@@ -139,7 +137,6 @@ public class AsyncPostMsgCallBack implements FutureCallback<HttpResponse> {
                         "数据加载成功,返回码: " + statuCode);
 
                 AvroMonitorTimerTask.msgSuccessSum++;
-//                EntityUtils.consume(entity);
             } else {
                 switch (resRedirBodyCode) {
                     case 300:
@@ -163,7 +160,6 @@ public class AsyncPostMsgCallBack implements FutureCallback<HttpResponse> {
                         break;
                     case 410:
                         logger.info("AsyncPostMsgCallBack==>statuCode:" + statuCode + ",resRedirBodyCode:410,Cookie已过期或Cookie错误,将开始更新Cookie.");
-//                        YbHttpAvroSinkFile.redirectContents.add(dataJson);
                         YbHttpAvroSinkFile.updateCookie();
                         break;
                     case 500:
@@ -175,12 +171,11 @@ public class AsyncPostMsgCallBack implements FutureCallback<HttpResponse> {
                         AvroMonitorTimerTask.msgFailedSum++;
                         break;
                 }
-//                EntityUtils.consume(entity);
             }
 
             if (entity != null) {
                 try {
-                    EntityUtils.consume(entity);//20201018移到外部
+                    EntityUtils.consume(entity);
                 } catch (final IOException ex) {
                 }
             }
@@ -189,8 +184,7 @@ public class AsyncPostMsgCallBack implements FutureCallback<HttpResponse> {
             logger.error("AsyncPostMsgCallBack Get response from ZX is error===>>>" + e.getMessage() + "<<<===Message is==>" + dataJson + "<==");//细化日志
             e.printStackTrace();
         } finally {
-            HttpClientUtils.closeQuietly(response);//20201018移入finally
-//            EntityUtils.consumeQuietly(response.getEntity());
+            HttpClientUtils.closeQuietly(response);
         }
     }
 
@@ -213,8 +207,7 @@ public class AsyncPostMsgCallBack implements FutureCallback<HttpResponse> {
             AvroMonitorTimerTask.msgFailedSum++;
             logger.error("dataJson:" + dataJson + " send failed finally,error:" + e.toString());
         } else {
-//            HttpClientUtil.asyncProducerAvroToZX(postMsgUrl, topicName, dataJson, userAgent, msgSessionCookie, count);//failed失败时重试
-            HttpClientUtil.asyncProducerAvroToZX(postMsgUrl, topicName, dataJson, userAgent, msgSessionCookie, count, System.currentTimeMillis());//failed失败时重试//20201018新增发送时间
+            HttpClientUtil.asyncProducerAvroToZX(postMsgUrl, topicName, dataJson, userAgent, msgSessionCookie, count, System.currentTimeMillis());//failed失败时重试
         }
     }
 
