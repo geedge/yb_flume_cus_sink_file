@@ -777,7 +777,7 @@ public class HttpClientUtil {
         byte[] dataLengthByteArray = null;
         try {
             Schema schemaDataAvro = getSchemaFromHashMap(topic);
-            logger.info(topic + "： 消息批量组装数量"  + contents.size());
+
             for (String dataJson : contents) {
                 byte[] resultArray = null;
                 ByteArrayOutputStream outAvro = new ByteArrayOutputStream();
@@ -804,9 +804,8 @@ public class HttpClientUtil {
                     results = byteMerger(results, dataLengthByteArray, resultArray);
                 }
 
-
             }
-            logger.info(topic + "-组装后占用Bytes:" +  " , " + results.length);
+            logger.info(topic + "数据封装记录 "+ contents.size()  + " 条，字节数为:" +  " , " + results.length);
         } catch (Exception e) {
             logger.error("Encapsulation Message Data Error " + e);
         }
@@ -831,7 +830,7 @@ public class HttpClientUtil {
             httpPost.addHeader("Cookie", msgSessionCookie);
             String md5Avro = MD5Utils.md5Encode(results);
             httpPost.addHeader("Checksum", md5Avro);
-            logger.info("批量发送，总体请求端的Checksum MD5 avro 加密为:" + md5Avro);
+            logger.info("批量发送body Checksum MD5 为:" + md5Avro);
             httpPost.addHeader("Content-Type", "binary/octet-stream");
             httpPost.addHeader("X-Tag", getXTAG(dataJson, topic));
             ByteArrayEntity payload = new ByteArrayEntity(results);

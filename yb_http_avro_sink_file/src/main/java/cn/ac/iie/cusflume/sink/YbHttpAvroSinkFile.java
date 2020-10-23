@@ -369,7 +369,9 @@ public class YbHttpAvroSinkFile extends AbstractSink implements Configurable {
                     });
                 }
             } else {
+                long beginAvroTime = System.currentTimeMillis();
                 byte[] msgResults = HttpClientUtil.encapsulationData(topicName, contents);
+                logger.info("Batch Avro and Encapsulation Data Time(ms)："+ (System.currentTimeMillis() - beginAvroTime) );
                 pool.execute(new Runnable() {
                     @Override
                     public void run() {
@@ -383,7 +385,6 @@ public class YbHttpAvroSinkFile extends AbstractSink implements Configurable {
                 });
             }
 
-
         } catch (Exception e) {
             logger.error("YbHttpAvroSinkFile send Msg is error===>" + e + "<===");
             transaction.commit();
@@ -391,6 +392,7 @@ public class YbHttpAvroSinkFile extends AbstractSink implements Configurable {
             if (transaction != null) {
                 transaction.commit();
             }
+            AvroMonitorTimerTask.subReadyPostNum(contents.size());
         }
     }
 

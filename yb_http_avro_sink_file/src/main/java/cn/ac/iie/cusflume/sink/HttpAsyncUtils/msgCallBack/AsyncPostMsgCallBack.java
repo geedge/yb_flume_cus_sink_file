@@ -133,7 +133,7 @@ public class AsyncPostMsgCallBack implements FutureCallback<HttpResponse> {
                 logger.info("数据加载成功,返回码: " + statuCode);
                 logger.debug("生产数据==>" + dataJson + "<==," +
                         "生产数据checksum==>" + MD5Utils.md5Encode(dataJson) + "<==," +
-                        "服务端响应时间responseTime==>" + (System.currentTimeMillis() - postTime) + "<==," +
+                        "服务端响应时间(ms)==>" + (System.currentTimeMillis() - postTime) + "<==," +
                         "数据加载成功,返回码: " + statuCode);
 
                 AvroMonitorTimerTask.addSuccessNum(count);
@@ -142,7 +142,9 @@ public class AsyncPostMsgCallBack implements FutureCallback<HttpResponse> {
                 AvroMonitorTimerTask.addFailedNum(count);
                 switch (resRedirBodyCode) {
                     case 300:
-                        logger.info("AsyncPostMsgCallBack==>重定向响应体-redirect-ret==>" + ret + "<==,statuCode:" + statuCode + ",resRedirBodyCode:300,当前服务节点负载过高,将向其他通信地址发送请求.");
+                        logger.info("AsyncPostMsgCallBack==>重定向响应体-redirect-ret==>" + ret
+                                + "服务端响应时间(ms)==>" + (System.currentTimeMillis() - postTime) + "<==,"
+                                + "<==,statuCode:" + statuCode + ",resRedirBodyCode:300,当前服务节点负载过高,将向其他通信地址发送请求.");
                         //若不包含对应字段，则不进行对象转换，减少报错
                         if (ret.contains("redirect")) {
                             ResRedirBody resRedirBody = JSONObject.parseObject(ret, ResRedirBody.class);
@@ -157,19 +159,27 @@ public class AsyncPostMsgCallBack implements FutureCallback<HttpResponse> {
                         YbHttpAvroSinkFile.redirectContents.add(dataJson);
                         break;
                     case 301:
-                        logger.info("AsyncPostMsgCallBack==>statuCode:" + statuCode + ",resRedirBodyCode:301,当前所有服务端节点均负载过高,暂无可用资源,请等待.");
+                        logger.info("AsyncPostMsgCallBack==>statuCode:" + statuCode
+                                + "服务端响应时间(ms)==>" + (System.currentTimeMillis() - postTime) + "<==,"
+                                + ",resRedirBodyCode:301,当前所有服务端节点均负载过高,暂无可用资源,请等待.");
                         YbHttpAvroSinkFile.redirectContents.add(dataJson);
                         break;
                     case 410:
-                        logger.info("AsyncPostMsgCallBack==>statuCode:" + statuCode + ",resRedirBodyCode:410,Cookie已过期或Cookie错误,将开始更新Cookie.");
+                        logger.info("AsyncPostMsgCallBack==>statuCode:" + statuCode
+                                + "服务端响应时间(ms)==>" + (System.currentTimeMillis() - postTime) + "<==,"
+                                + ",resRedirBodyCode:410,Cookie已过期或Cookie错误,将开始更新Cookie.");
                         YbHttpAvroSinkFile.updateCookie();
                         break;
                     case 500:
-                        logger.info("AsyncPostMsgCallBack==>statuCode:" + statuCode + ",resRedirBodyCode:500,处理请求过程出现系统错误.");
+                        logger.info("AsyncPostMsgCallBack==>statuCode:" + statuCode
+                                + "服务端响应时间(ms)==>" + (System.currentTimeMillis() - postTime) + "<==,"
+                                + ",resRedirBodyCode:500,处理请求过程出现系统错误.");
                         YbHttpAvroSinkFile.updateCookie();
                         break;
                     default:
-                        logger.error("AsyncPostMsgCallBack==>数据加载失败,响应体:" + ret + "---statuCode:" + statuCode + "---resRedirBodyCode:" + resRedirBodyCode);
+                        logger.error("AsyncPostMsgCallBack==>数据加载失败,响应体:" + ret
+                                + "服务端响应时间(ms)==>" + (System.currentTimeMillis() - postTime) + "<==,"
+                                + "---statuCode:" + statuCode + "---resRedirBodyCode:" + resRedirBodyCode);
                         break;
                 }
             }

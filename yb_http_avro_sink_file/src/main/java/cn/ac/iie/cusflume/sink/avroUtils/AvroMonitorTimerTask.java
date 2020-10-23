@@ -59,6 +59,17 @@ public class AvroMonitorTimerTask {
     }
 
 
+    public static synchronized void subReadyPostNum(int count) {
+        if ( msgReadyPostSum >= count) {
+            msgReadyPostSum -= count;
+        } else {
+            msgReadyPostSum = 0;
+        }
+
+    }
+
+
+
 
 
 
