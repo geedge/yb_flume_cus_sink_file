@@ -796,8 +796,8 @@ public class HttpClientUtil {
                     outAvro.close();
                     outAvro = null;
                 }
-                dataLengthByteArray = sumHex(resultArray.length, 4);
                 resultArray = getTagRecordAndMergeAllArray(topic, dataJson, resultArray);
+                dataLengthByteArray = sumHex(resultArray.length, 4);
                 if (results == null) {
                     results = byteMerger(dataLengthByteArray, resultArray);
                 } else {
