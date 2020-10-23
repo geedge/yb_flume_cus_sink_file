@@ -203,6 +203,7 @@ public class HttpAsyncClient {
                     .setDefaultCredentialsProvider(credentialsProvider)
                     .setDefaultAuthSchemeRegistry(authSchemeRegistry)
                     .setDefaultCookieStore(new BasicCookieStore())
+                    .setDefaultRequestConfig(requestConfig)
                     .setKeepAliveStrategy(kaStrategy)
                     .build();
         }

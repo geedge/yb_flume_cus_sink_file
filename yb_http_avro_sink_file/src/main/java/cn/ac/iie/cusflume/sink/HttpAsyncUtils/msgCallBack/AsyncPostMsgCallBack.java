@@ -136,8 +136,10 @@ public class AsyncPostMsgCallBack implements FutureCallback<HttpResponse> {
                         "服务端响应时间responseTime==>" + (System.currentTimeMillis() - postTime) + "<==," +
                         "数据加载成功,返回码: " + statuCode);
 
-                AvroMonitorTimerTask.msgSuccessSum+=count;
+                AvroMonitorTimerTask.addSuccessNum(count);
+
             } else {
+                AvroMonitorTimerTask.addFailedNum(count);
                 switch (resRedirBodyCode) {
                     case 300:
                         logger.info("AsyncPostMsgCallBack==>重定向响应体-redirect-ret==>" + ret + "<==,statuCode:" + statuCode + ",resRedirBodyCode:300,当前服务节点负载过高,将向其他通信地址发送请求.");
@@ -167,8 +169,7 @@ public class AsyncPostMsgCallBack implements FutureCallback<HttpResponse> {
                         YbHttpAvroSinkFile.updateCookie();
                         break;
                     default:
-                        logger.error("AsyncPostMsgCallBack==>数据加载失败,响应体:" + ret + "---statuCode:" + statuCode + "---resRedirBodyCode:" + resRedirBodyCode + "---失败数据(第一条）:\n" + dataJson);
-                        AvroMonitorTimerTask.msgFailedSum+= count;
+                        logger.error("AsyncPostMsgCallBack==>数据加载失败,响应体:" + ret + "---statuCode:" + statuCode + "---resRedirBodyCode:" + resRedirBodyCode);
                         break;
                 }
             }
@@ -204,7 +205,8 @@ public class AsyncPostMsgCallBack implements FutureCallback<HttpResponse> {
         count++;
         logger.info("AsyncPostMagCallBack Request is Failed,This Failed data is ==>" + dataJson + "<==,Retry count=" + count);
         if (count > 1) {
-            AvroMonitorTimerTask.msgFailedSum++;
+
+            AvroMonitorTimerTask.addFailedNum(1);
             logger.error("dataJson:" + dataJson + " send failed finally,error:" + e.toString());
         } else {
             HttpClientUtil.asyncProducerAvroToZX(postMsgUrl, topicName, dataJson, userAgent, msgSessionCookie, count, System.currentTimeMillis());//failed失败时重试

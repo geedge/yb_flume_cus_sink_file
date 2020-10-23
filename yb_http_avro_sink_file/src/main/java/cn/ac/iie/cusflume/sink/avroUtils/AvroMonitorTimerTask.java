@@ -42,6 +42,26 @@ public class AvroMonitorTimerTask {
 
     public static boolean startFileMonitor = false;//默认false
 
+
+    public static synchronized void addSuccessNum(int count) {
+        msgSuccessSum += count;
+    }
+
+    public static synchronized void addFailedNum(int count) {
+        msgFailedSum += count;
+    }
+    public static synchronized void addTotalNum(int count) {
+        msgTotalSum += count;
+    }
+
+    public static synchronized void addReadyPostNum(int count) {
+        msgReadyPostSum += count;
+    }
+
+
+
+
+
     /**
      * 消息---Java自定义定时器
      */

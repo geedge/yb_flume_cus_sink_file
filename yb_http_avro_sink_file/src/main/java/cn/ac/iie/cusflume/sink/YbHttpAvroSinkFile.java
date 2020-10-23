@@ -318,10 +318,13 @@ public class YbHttpAvroSinkFile extends AbstractSink implements Configurable {
     private void sendMsgLog(Transaction transaction, List<String> contents) {
 
         try {
-            //获取状态回传sessionID
-            if (StringUtils.isBlank(monitorSessionCookie)) {
+            /**
+             * 获取状态回传sessionID,检查认证是否存在
+             */
+            if (StringUtils.isBlank(monitorSessionCookie)
+                || StringUtils.isBlank(msgSessionCookie)) {
                 getMonitorSessionCookie();//sendMsgLog-首次获取monitorSessionCookie
-
+                getMsgSessionCookie();//sendMsgLog-msgSessionCookie为空,首次接入验证
                 if (!checkTimerStart) {
                     checkCookieEveryWeek();//sendMsgLog-第一次启动检测到monitorSessionCookie为空时启动任务但不进行验证,后续间隔一段时间后开始验证,每次申请monitorSessionCookie和msgSessionCookie两个Cookie
                     checkTimerStart = true;
@@ -334,12 +337,6 @@ public class YbHttpAvroSinkFile extends AbstractSink implements Configurable {
                     monitorStart = true;
                     logger.warn("MonitorMsg Timer is started......");
                 }
-            }
-
-            AvroMonitorTimerTask.msgTotalSum += contents.size();//消息使用,文件+消息不使用
-            //检查认证是否存在
-            if (StringUtils.isBlank(msgSessionCookie)) {
-                getMsgSessionCookie();//sendMsgLog-msgSessionCookie为空,首次接入验证
 
                 /**
                  * 开启定时扫描重定向数据集合
@@ -349,61 +346,43 @@ public class YbHttpAvroSinkFile extends AbstractSink implements Configurable {
                     redirectContentsPostStart = true;
                     logger.warn("RedirectContents Timer Post is started......");
                 }
+            }
 
-                AvroMonitorTimerTask.msgReadyPostSum += contents.size();
-                if (isFile(topicName)) {
-                    for (String content : contents) {
-                        HttpClientUtil.asyncProducerAvroToZX(postMsgUrl, topicName, content,
-                                userAgent, msgSessionCookie, 1, System.currentTimeMillis());//初始发送count计数为0
-                    }
-                } else {
-                    byte[] msgResults = HttpClientUtil.encapsulationData(topicName, contents);
-                    HttpClientUtil.asyncProducerAvroMessageToZX(postMsgUrl, topicName, msgResults, contents.get(0),
-                            userAgent, msgSessionCookie, contents.size(), System.currentTimeMillis());//初始发送count计数为0
-                }
 
-            } else {//sessionCookie不为空
-                logger.info("AC msg sessionId already exists,msg sessionId is ===>" + msgSessionCookie);
-                AvroMonitorTimerTask.msgReadyPostSum += contents.size();
+            AvroMonitorTimerTask.addTotalNum(contents.size());
+            logger.info("AC msg sessionId already exists,msg sessionId is ===>" + msgSessionCookie);
+            AvroMonitorTimerTask.addReadyPostNum(contents.size());
+            if (isSingle(topicName)) {
+                for (String content : contents) {
 
-                //Router 接口，指定message 与 Files
-                if (isFile(topicName)) {
-                    for (String content : contents) {
-
-                        pool.execute(new Runnable() {
-                            @Override
-                            public void run() {
-                                try {
-
-                                    HttpClientUtil.asyncProducerAvroToZX(postMsgUrl, topicName, content,
-                                            userAgent, msgSessionCookie, 1, System.currentTimeMillis());//初始发送count计数为0
-                                } catch (Exception e) {
-                                    logger.error("sendMsgLog multi-thread is error==>" + e + "<==,Thread is==>" + Thread.currentThread().getName() + "<==.");
-                                }
-                            }
-                        });
-                    }
-                } else {
-                    byte[] msgResults = HttpClientUtil.encapsulationData(topicName, contents);
                     pool.execute(new Runnable() {
                         @Override
                         public void run() {
                             try {
-                                HttpClientUtil.asyncProducerAvroMessageToZX(postMsgUrl, topicName, msgResults, contents.get(0),
-                                        userAgent, msgSessionCookie, contents.size(), System.currentTimeMillis());//初始发送count计数为0
+
+                                HttpClientUtil.asyncProducerAvroToZX(postMsgUrl, topicName, content,
+                                        userAgent, msgSessionCookie, 1, System.currentTimeMillis());//初始发送count计数为0
                             } catch (Exception e) {
                                 logger.error("sendMsgLog multi-thread is error==>" + e + "<==,Thread is==>" + Thread.currentThread().getName() + "<==.");
                             }
                         }
                     });
-
-
                 }
-
-
-
-
+            } else {
+                byte[] msgResults = HttpClientUtil.encapsulationData(topicName, contents);
+                pool.execute(new Runnable() {
+                    @Override
+                    public void run() {
+                        try {
+                            HttpClientUtil.asyncProducerAvroMessageToZX(postMsgUrl, topicName, msgResults, contents.get(0),
+                                    userAgent, msgSessionCookie, contents.size(), System.currentTimeMillis());//初始发送count计数为0
+                        } catch (Exception e) {
+                            logger.error("sendMsgLog multi-thread is error==>" + e + "<==,Thread is==>" + Thread.currentThread().getName() + "<==.");
+                        }
+                    }
+                });
             }
+
 
         } catch (Exception e) {
             logger.error("YbHttpAvroSinkFile send Msg is error===>" + e + "<===");
@@ -415,14 +394,24 @@ public class YbHttpAvroSinkFile extends AbstractSink implements Configurable {
         }
     }
 
-    private static boolean isFile(String topicName) {
 
-        if (topicName.equals("NTC-COLLECT-FILE-LOG"))
+    private static boolean isSingle(String topicName) {
+
+        if (topicName.equals("NTC-COLLECT-FILE-LOG")
+                || topicName.equals("NTC-COLLECT-HTTP-DOC-LOG")
+                || topicName.equals("NTC-COLLECT-HTTP-AV-LOG")
+                || topicName.equals("NTC-COLLECT-FTP-DOC-LOG")
+                || topicName.equals("NTC-COLLECT-MAIL-LOG")
+                || topicName.equals("NTC-COLLECT-TELNET-LOG")
+                || topicName.equals("INFLUX-SAPP-BPS-STAT-LOG")) //监控消息，几分钟1条
+
             return true;
         else {
             return false;
         }
     }
+
+
 
     /**
      * 总线入库前验证
