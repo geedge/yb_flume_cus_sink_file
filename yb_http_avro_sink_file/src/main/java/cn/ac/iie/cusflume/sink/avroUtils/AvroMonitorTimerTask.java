@@ -50,8 +50,8 @@ public class AvroMonitorTimerTask {
         timer.scheduleAtFixedRate(new TimerTask() {
             @Override
             public void run() {
-                AvroMonitorTimerTask.msgTotalSum++;
-                AvroMonitorTimerTask.msgReadyPostSum++;
+                //AvroMonitorTimerTask.msgTotalSum++;
+                //AvroMonitorTimerTask.msgReadyPostSum++;
 
                 try {
                     if ("yb".equals(RealtimeCountConfig.MONITOR_TYPE)) {//只有当类型为一部(yb)时才进行状态上报

@@ -768,6 +768,97 @@ public class HttpClientUtil {
     }
 
     /**
+     * 对消息数据进行批量组装
+     * @param contents
+     * @return
+     */
+    public static byte[] encapsulationData(String topic, List<String> contents) {
+        byte[] results = null;
+        byte[] dataLengthByteArray = null;
+        try {
+            Schema schemaDataAvro = getSchemaFromHashMap(topic);
+            logger.info(topic + "： 消息批量组装数量"  + contents.size());
+            for (String dataJson : contents) {
+                byte[] resultArray = null;
+                ByteArrayOutputStream outAvro = new ByteArrayOutputStream();
+                BinaryEncoder encoder = EncoderFactory.get().binaryEncoder(outAvro, null);
+                DatumWriter<GenericRecord> fileWriter = new SpecificDatumWriter<GenericRecord>(schemaDataAvro);
+                outAvro.reset();
+                GenericRecord recordAvro = new GenericData.Record(schemaDataAvro);
+                recordAvro = GetAvroRecordByTopicUtils.getAvroRecordByTopicName(topic, recordAvro, dataJson, schemaDataAvro);
+                fileWriter.write(recordAvro, encoder);
+                if (encoder != null) {
+                    encoder.flush();
+                }
+                if (outAvro != null) {
+                    resultArray = outAvro.toByteArray();
+                    outAvro.flush();
+                    outAvro.close();
+                    outAvro = null;
+                }
+                dataLengthByteArray = sumHex(resultArray.length, 4);
+                resultArray = getTagRecordAndMergeAllArray(topic, dataJson, resultArray);
+                if (results == null) {
+                    results = byteMerger(dataLengthByteArray, resultArray);
+                } else {
+                    results = byteMerger(results, dataLengthByteArray, resultArray);
+                }
+
+
+            }
+            logger.info(topic + "-组装后占用Bytes:" +  " , " + results.length);
+        } catch (Exception e) {
+            logger.error("Encapsulation Message Data Error " + e);
+        }
+
+        return results;
+
+    }
+
+    /**
+     * 批量生产消息-总线
+     */
+    public static void asyncProducerAvroMessageToZX(String urlProducer,String topic, byte[] results, String dataJson, String userAgent, String msgSessionCookie, int count, long postTime) {
+        HttpPost httpPost = null;
+        urlProducer = urlProducer.trim();
+        CloseableHttpAsyncClient httpClient = null;
+        try {
+            httpClient = HttpClientFactory.getInstance().getHttpAsyncClientPool().getAsyncHttpClient();
+            httpClient.start();
+            httpPost = new HttpPost(urlProducer);
+            httpPost.addHeader("User-Agent", userAgent);
+            httpPost.setHeader(HTTP.CONN_DIRECTIVE, HTTP.CONN_KEEP_ALIVE);
+            httpPost.addHeader("Cookie", msgSessionCookie);
+            String md5Avro = MD5Utils.md5Encode(results);
+            httpPost.addHeader("Checksum", md5Avro);
+            logger.info("批量发送，总体请求端的Checksum MD5 avro 加密为:" + md5Avro);
+            httpPost.addHeader("Content-Type", "binary/octet-stream");
+            httpPost.addHeader("X-Tag", getXTAG(dataJson, topic));
+            ByteArrayEntity payload = new ByteArrayEntity(results);
+            payload.setContentEncoding("utf-8");
+            httpPost.setEntity(payload);
+            AsyncPostMsgCallBack asyncPostMsgCallBack = new AsyncPostMsgCallBack(urlProducer, topic, dataJson, userAgent, msgSessionCookie, count, postTime);
+            httpClient.execute(httpPost, asyncPostMsgCallBack);
+        } catch (MalformedURLException e) {
+            //执行URL url = new URL()的异常
+            e.printStackTrace();
+        } catch (ClientProtocolException e) {
+            // 执行httpClient.execute(httpGet)的异常
+            e.printStackTrace();
+        } catch (IOException e) {
+            // 执行httpClient.execute(httpGet)的异常
+            logger.error("asyncProducerAvroToZX is IOException===>>>" + e.getMessage() + "<<<===IOException Message is==>" + dataJson + "<==");//进一步细化日志
+            e.printStackTrace();
+        } catch (Exception e) {
+            //handle response here... try other servers
+            logger.error("asyncProducerAvroToZX is Exception===>>>" + e.getMessage() + "<<<===Exception Message is==>" + dataJson + "<==");//进一步细化日志
+            e.printStackTrace();
+        }
+
+    }
+
+
+    /**
      * 生产AVRO数据入ZX(单条)--数据不包含schema
      * 静态,适用于异步与多线程的版本
      *
@@ -809,7 +900,7 @@ public class HttpClientUtil {
                 outAvro.close();
                 outAvro = null;
             }
-            logger.info("数据对象或文件标签resultArray长度为:" + resultArray.length);
+            logger.debug("数据对象或文件标签resultArray长度为:" + resultArray.length);
             logger.debug("原始数据==>" + dataJson + "<==," +
                     "原始数据checksum==>" + MD5Utils.md5Encode(dataJson) + "<==," +
                     "数据对象或文件标签resultArray长度为:" + resultArray.length + "," +
@@ -863,6 +954,7 @@ public class HttpClientUtil {
             //payload.setContentType("text/xml; charset=UTF-8");
             // anti avro
             httpPost.setEntity(payload);
+
 
             logger.info("最终加载内容字节数组长度: " + resultArray.length);
 //            logger.debug("封装数据==>" + dataJson + "<==最终加载内容字节数组长度: " + resultArray.length);//20200428进一步细化日志
@@ -957,7 +1049,7 @@ public class HttpClientUtil {
             //以下为临时,为了增加一个状态的临时d_tag,因为d_tag前端目前(20191222)传不了-----------↑--------------
 
             recordAvro = GetAvroRecordByTopicUtils.getAvroRecordByTopicName(tagTopicName, recordAvro, dataJson, schemaDTagAvro);//单条-"log-tag"或者"status-tag",直接传入Schema
-            logger.info("封装日志标签或状态标签AvroRecord后数据为===>" + recordAvro.toString() + "<===封装日志标签或状态标签AvroRecord后数据为");
+            logger.debug("封装日志标签或状态标签AvroRecord后数据为===>" + recordAvro.toString() + "<===封装日志标签或状态标签AvroRecord后数据为");
             fileWriter.write(recordAvro, encoder);
 
             if (encoder != null) {
@@ -971,7 +1063,7 @@ public class HttpClientUtil {
                 outAvro.close();
                 outAvro = null;
             }
-            logger.info("日志标签或状态标签dTagByteArray长度为:" + dTagByteArray.length);
+            logger.debug("日志标签或状态标签dTagByteArray长度为:" + dTagByteArray.length);
             logger.debug("标签数据==>" + dataJson + "<==," +
                     "标签数据checksum==>" + MD5Utils.md5Encode(dataJson) + "<==," +
                     "日志标签或状态标签dTagByteArray长度为:" + dTagByteArray.length + "," +
@@ -1000,6 +1092,10 @@ public class HttpClientUtil {
             return dataResultArray;//报错时返回数据对象数组,即本身不变
         }
     }
+
+
+
+
 
     /**
      * 由于已经获取了文件标签(是刚进入方法就作为数据对象处理的数据标签d_tag,因为NTC-COLLECT-FILE-LOG数据本身就是数据标签d_tag),所以只需要将所有相关数据字节数组化后拼接返回

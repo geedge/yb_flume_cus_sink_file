@@ -7,6 +7,7 @@ import cn.ac.iie.cusflume.sink.bean.ac.Res.AcResBody;
 import cn.ac.iie.cusflume.sink.bean.configBean.ConfigInfo;
 import cn.ac.iie.cusflume.sink.daoUtils.RealtimeCountConfig;
 import com.google.common.base.Preconditions;
+import com.google.common.base.Stopwatch;
 import com.google.common.base.Throwables;
 import org.apache.commons.lang.StringUtils;
 import org.apache.flume.*;
@@ -17,6 +18,7 @@ import org.apache.log4j.Logger;
 import java.util.*;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 public class YbHttpAvroSinkFile extends AbstractSink implements Configurable {
 
@@ -58,6 +60,8 @@ public class YbHttpAvroSinkFile extends AbstractSink implements Configurable {
     private static boolean checkTimerStart = false;//定时获取Cookie启动器
 
     private static boolean redirectContentsPostStart = false;//定时post重定向数据集合
+
+    private static  int  batchInsertNum = RealtimeCountConfig.BATCH_INSERT_NUM;
 
     /**
      * 用于存储由于服务器资源不足所造成的未发送数据
@@ -312,6 +316,7 @@ public class YbHttpAvroSinkFile extends AbstractSink implements Configurable {
      * @param contents
      */
     private void sendMsgLog(Transaction transaction, List<String> contents) {
+
         try {
             //获取状态回传sessionID
             if (StringUtils.isBlank(monitorSessionCookie)) {
@@ -324,7 +329,8 @@ public class YbHttpAvroSinkFile extends AbstractSink implements Configurable {
                 }
 
                 if (!monitorStart) {//消息定时上报
-                    AvroMonitorTimerTask.monitorMsg(monitorSessionCookie, postMsgUrl, "monitor-msg", 1, userAgent, topicName);//sendMsgLog-日志消息
+                    AvroMonitorTimerTask.monitorMsg(monitorSessionCookie, postMsgUrl,
+                            "monitor-msg", 1, userAgent, topicName);//sendMsgLog-日志消息
                     monitorStart = true;
                     logger.warn("MonitorMsg Timer is started......");
                 }
@@ -345,33 +351,76 @@ public class YbHttpAvroSinkFile extends AbstractSink implements Configurable {
                 }
 
                 AvroMonitorTimerTask.msgReadyPostSum += contents.size();
-                for (String content : contents) {
-                    HttpClientUtil.asyncProducerAvroToZX(postMsgUrl, topicName, content, userAgent, msgSessionCookie, 0, System.currentTimeMillis());//初始发送count计数为0
+                if (isFile(topicName)) {
+                    for (String content : contents) {
+                        HttpClientUtil.asyncProducerAvroToZX(postMsgUrl, topicName, content,
+                                userAgent, msgSessionCookie, 1, System.currentTimeMillis());//初始发送count计数为0
+                    }
+                } else {
+                    byte[] msgResults = HttpClientUtil.encapsulationData(topicName, contents);
+                    HttpClientUtil.asyncProducerAvroMessageToZX(postMsgUrl, topicName, msgResults, contents.get(0),
+                            userAgent, msgSessionCookie, contents.size(), System.currentTimeMillis());//初始发送count计数为0
                 }
+
             } else {//sessionCookie不为空
                 logger.info("AC msg sessionId already exists,msg sessionId is ===>" + msgSessionCookie);
                 AvroMonitorTimerTask.msgReadyPostSum += contents.size();
-                for (String content : contents) {
+
+                //Router 接口，指定message 与 Files
+                if (isFile(topicName)) {
+                    for (String content : contents) {
+
+                        pool.execute(new Runnable() {
+                            @Override
+                            public void run() {
+                                try {
+
+                                    HttpClientUtil.asyncProducerAvroToZX(postMsgUrl, topicName, content,
+                                            userAgent, msgSessionCookie, 1, System.currentTimeMillis());//初始发送count计数为0
+                                } catch (Exception e) {
+                                    logger.error("sendMsgLog multi-thread is error==>" + e + "<==,Thread is==>" + Thread.currentThread().getName() + "<==.");
+                                }
+                            }
+                        });
+                    }
+                } else {
+                    byte[] msgResults = HttpClientUtil.encapsulationData(topicName, contents);
                     pool.execute(new Runnable() {
                         @Override
                         public void run() {
                             try {
-                                HttpClientUtil.asyncProducerAvroToZX(postMsgUrl, topicName, content, userAgent, msgSessionCookie, 0, System.currentTimeMillis());//初始发送count计数为0
+                                HttpClientUtil.asyncProducerAvroMessageToZX(postMsgUrl, topicName, msgResults, contents.get(0),
+                                        userAgent, msgSessionCookie, contents.size(), System.currentTimeMillis());//初始发送count计数为0
                             } catch (Exception e) {
                                 logger.error("sendMsgLog multi-thread is error==>" + e + "<==,Thread is==>" + Thread.currentThread().getName() + "<==.");
                             }
                         }
                     });
+
+
                 }
+
+
+
+
             }
 
         } catch (Exception e) {
-            logger.error("YbHttpAvroSinkFile sendFileMsg is error===>" + e + "<===");
+            logger.error("YbHttpAvroSinkFile send Msg is error===>" + e + "<===");
             transaction.commit();
         } finally {
             if (transaction != null) {
                 transaction.commit();
             }
+        }
+    }
+
+    private static boolean isFile(String topicName) {
+
+        if (topicName.equals("NTC-COLLECT-FILE-LOG"))
+            return true;
+        else {
+            return false;
         }
     }
 
@@ -382,6 +431,7 @@ public class YbHttpAvroSinkFile extends AbstractSink implements Configurable {
      * @param userAgent
      * @param xTag
      * @param requestType
+     *
      * @return
      */
     private static AcResBody acCheck(String checkMsgUrl, String userAgent, String xTag, int requestType) {

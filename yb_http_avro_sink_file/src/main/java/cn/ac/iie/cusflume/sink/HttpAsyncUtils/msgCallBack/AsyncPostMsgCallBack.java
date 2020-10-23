@@ -123,9 +123,9 @@ public class AsyncPostMsgCallBack implements FutureCallback<HttpResponse> {
             }
 //            int resRedirBodyCode = resRedirBody.getCode();
 
-            logger.debug("生产数据==>" + dataJson + "<==," +
+          /*  logger.debug("生产数据==>" + dataJson + "<==," +
                     "生产数据checksum==>" + MD5Utils.md5Encode(dataJson) + "<==," +
-                    "返回的生产原始响应体String数据为:" + ret);
+                    "返回的生产原始响应体String数据为:" + ret);*/
             /**
              * 20200818-接口细化响应码
              */
@@ -136,7 +136,7 @@ public class AsyncPostMsgCallBack implements FutureCallback<HttpResponse> {
                         "服务端响应时间responseTime==>" + (System.currentTimeMillis() - postTime) + "<==," +
                         "数据加载成功,返回码: " + statuCode);
 
-                AvroMonitorTimerTask.msgSuccessSum++;
+                AvroMonitorTimerTask.msgSuccessSum+=count;
             } else {
                 switch (resRedirBodyCode) {
                     case 300:
@@ -167,8 +167,8 @@ public class AsyncPostMsgCallBack implements FutureCallback<HttpResponse> {
                         YbHttpAvroSinkFile.updateCookie();
                         break;
                     default:
-                        logger.error("AsyncPostMsgCallBack==>数据加载失败,响应体:" + ret + "---statuCode:" + statuCode + "---resRedirBodyCode:" + resRedirBodyCode + "---失败数据为:\n" + dataJson);
-                        AvroMonitorTimerTask.msgFailedSum++;
+                        logger.error("AsyncPostMsgCallBack==>数据加载失败,响应体:" + ret + "---statuCode:" + statuCode + "---resRedirBodyCode:" + resRedirBodyCode + "---失败数据(第一条）:\n" + dataJson);
+                        AvroMonitorTimerTask.msgFailedSum+= count;
                         break;
                 }
             }
@@ -203,7 +203,7 @@ public class AsyncPostMsgCallBack implements FutureCallback<HttpResponse> {
     public void failed(Exception e) {
         count++;
         logger.info("AsyncPostMagCallBack Request is Failed,This Failed data is ==>" + dataJson + "<==,Retry count=" + count);
-        if (count > 3) {
+        if (count > 1) {
             AvroMonitorTimerTask.msgFailedSum++;
             logger.error("dataJson:" + dataJson + " send failed finally,error:" + e.toString());
         } else {
