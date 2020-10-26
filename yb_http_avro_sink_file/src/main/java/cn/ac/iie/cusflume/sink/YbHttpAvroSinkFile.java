@@ -16,6 +16,7 @@ import org.apache.flume.sink.AbstractSink;
 import org.apache.log4j.Logger;
 
 import java.util.*;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -25,7 +26,7 @@ public class YbHttpAvroSinkFile extends AbstractSink implements Configurable {
     private static Logger logger = Logger.getLogger(YbHttpAvroSinkFile.class);
 
     protected static ExecutorService pool = Executors.newFixedThreadPool(RealtimeCountConfig.HTTP_ASYNC_PARALLELISM);
-
+    private static ConcurrentLinkedQueue<byte[]> concurrentLinkedQueue = new ConcurrentLinkedQueue<byte[]>();
     private static DataCenterLoad dcl;
 
     private static String postMsgUrl;//发送消息路径,配置文件获取,发送文件与发送消息皆需要
@@ -42,6 +43,7 @@ public class YbHttpAvroSinkFile extends AbstractSink implements Configurable {
     private static String userAgent;//业务系统编码systemId,该字段为系统的唯一编码,配置文件获取
 
     private static String xTag;//标签编码tag,在总线中唯一标识该标签,配置文件获取--20191217笔记--貌似现在已经不需要这个参数作为头部了
+    private static String dataJson;
 
     private static String msgSessionCookie;//消息会话标识,由响应返回
     private static String fileSessionCookie;//文件会话标识,由响应返回,仅发送文件时需要---若只发送消息,则fileSessionCookie会一直为空-即仅广东需要
@@ -93,6 +95,10 @@ public class YbHttpAvroSinkFile extends AbstractSink implements Configurable {
         } else {
             logger.error("Starting YbHttpAvroSinkFile is error==>checkMsgUrl and postMsgUrl can not be null!!!!");
         }
+
+        logger.warn("启动Sink File 执行程序 ==============");
+        //new Thread(new Consumer()).start();
+        logger.warn("开启多线程消费队列数据==================");
 
         logger.warn("Starting YbHttpAvroSinkFile ... ...");
     }
@@ -172,10 +178,9 @@ public class YbHttpAvroSinkFile extends AbstractSink implements Configurable {
     public Status process() throws EventDeliveryException {
         Status result = Status.READY;
         Channel channel = getChannel();
-        Transaction transaction = null;
-//        AcResBody acCheckResBody = null;
-//        ProResBody producerResBody = null;
+          Transaction transaction = null;
         try {
+            logger.debug("Current Process Thread number ID ：" + Thread.currentThread().getId());
             transaction = channel.getTransaction();
             transaction.begin();
             Event event = null;
@@ -214,6 +219,7 @@ public class YbHttpAvroSinkFile extends AbstractSink implements Configurable {
                          */
                     case "INFLUX-SAPP-BPS-STAT-LOG"://读取回写的influxDB合计数据用作状态上传
                         sendMsgLog(transaction, contents);//20191209移除文件发送,仅处理消息
+                        //sendMsgController(transaction, contents);
                         break;
                     default:
                         logger.error("YbHttpAvroSinkFile can't find this topic:" + topicName + ".Please confirm this topicName is correct!!!");
@@ -280,8 +286,8 @@ public class YbHttpAvroSinkFile extends AbstractSink implements Configurable {
         }
         if (statusCode == 200) {
             if (StringUtils.isNotBlank(acCheckMsgMonitorResBody.getSessionId())) {
-                logger.warn("getMonitorSessionCookie-Thread.currentThread().getName()===>" + Thread.currentThread().getName());
-                logger.warn("AC msgMonitor successfully,msgMonitor sessionId is ===>" + acCheckMsgMonitorResBody.getSessionId());
+                logger.info("getMonitorSessionCookie-Thread.currentThread().getName()===>" + Thread.currentThread().getName());
+                logger.info("AC msgMonitor successfully,msgMonitor sessionId is ===>" + acCheckMsgMonitorResBody.getSessionId());
                 monitorSessionCookie = acCheckMsgMonitorResBody.getSessionId();
             }
         } else if (statusCode == 0) {
@@ -308,21 +314,22 @@ public class YbHttpAvroSinkFile extends AbstractSink implements Configurable {
         return configInfo;
     }
 
+
+
     /**
-     * 往zx发送文件数据的消息,即发送文件的message数据(结构化数据)
-     * 本来是作为文件消息发送,现该方法主要用于单条发送数据-20191224
-     *
+     * 发送消息控制器
      * @param transaction
      * @param contents
      */
-    private void sendMsgLog(Transaction transaction, List<String> contents) {
-
+    private void sendMsgController(Transaction transaction, List<String> contents) {
         try {
+            AvroMonitorTimerTask.addTotalNum(contents.size());
+            AvroMonitorTimerTask.addReadyPostNum(contents.size());
             /**
              * 获取状态回传sessionID,检查认证是否存在
              */
             if (StringUtils.isBlank(monitorSessionCookie)
-                || StringUtils.isBlank(msgSessionCookie)) {
+                    || StringUtils.isBlank(msgSessionCookie)) {
                 getMonitorSessionCookie();//sendMsgLog-首次获取monitorSessionCookie
                 getMsgSessionCookie();//sendMsgLog-msgSessionCookie为空,首次接入验证
                 if (!checkTimerStart) {
@@ -338,9 +345,7 @@ public class YbHttpAvroSinkFile extends AbstractSink implements Configurable {
                     logger.warn("MonitorMsg Timer is started......");
                 }
 
-                /**
-                 * 开启定时扫描重定向数据集合
-                 */
+
                 if (!redirectContentsPostStart) {
                     postRedirectDataEveryMin();
                     redirectContentsPostStart = true;
@@ -349,8 +354,147 @@ public class YbHttpAvroSinkFile extends AbstractSink implements Configurable {
             }
 
 
+            if (isSingle(topicName)) {
+
+                for (String content : contents) {
+                    pool.execute(new Runnable() {
+                        @Override
+                        public void run() {
+                            try {
+
+                                HttpClientUtil.asyncProducerAvroToZX(postMsgUrl, topicName, content,
+                                        userAgent, msgSessionCookie, 1, System.currentTimeMillis());//初始发送count计数为0
+                            } catch (Exception e) {
+                                logger.error("sendMsgLog multi-thread is error==>" + e + "<==,Thread is==>" + Thread.currentThread().getName() + "<==.");
+                            }
+                        }
+                    });
+                }
+
+            } else {
+                xTag = HttpClientUtil.getXTAG(contents.get(0), topicName);
+                dataJson = contents.get(0);
+                int size = contents.size() / 100;
+                if (size > 0) {
+                    for (int i = 0; i < size; i++) {
+                        // byte[] msgResults = HttpClientUtil.encapsulationData(topicName, contents.subList(i*1, (i+1)*1));
+                        //concurrentLinkedQueue.add(msgResults);
+                        pool.execute(new Producer(contents.subList(i * 100, (i + 1) * 100)));
+                    }
+                    if (contents.size() % 100 > 0) {
+                        pool.execute(new Producer(contents.subList(size, contents.size())));
+                    }
+                } else {
+                    pool.execute(new Producer(contents));
+                }
+            }
+
+        } catch (Exception e) {
+            logger.error("YbHttpAvroSinkFile send Msg is error===>" + e + "<===");
+            transaction.commit();
+        } finally {
+            if (transaction != null) {
+                transaction.commit();
+            }
+            AvroMonitorTimerTask.subReadyPostNum(contents.size());
+        }
+
+
+
+
+
+    }
+
+
+
+
+    class Producer implements Runnable {
+
+        private List<String> contents;
+        public Producer(List<String> contents) { ;
+            this.contents = contents;
+        }
+        @Override
+        public void run() {
+            try {
+                logger.debug("Current Producer Thread number ID ：" + Thread.currentThread().getId());
+                byte[] msgResults = HttpClientUtil.encapsulationData(topicName, contents);
+                concurrentLinkedQueue.add(msgResults);
+
+            } catch (Exception e) {
+                logger.error("YbHttpAvroSinkFile send Msg is error===>" + e + "<===");
+
+            }
+
+
+        }
+    }
+
+
+    class Consumer implements Runnable {
+
+        @Override
+        public void run() {
+            logger.debug("Current Consumer Thread number ID ：" + Thread.currentThread().getId());
+            while(true) {
+
+                 if (concurrentLinkedQueue.isEmpty()) {
+                     logger.info("当前队列无数据，等待数据接入!");
+                 } else {
+                     byte[] result = concurrentLinkedQueue.poll();
+                     HttpClientUtil.asyncProducerAvroMessageToZX_toBatch(postMsgUrl, topicName, result, dataJson,
+                             userAgent, msgSessionCookie, 100, System.currentTimeMillis());//初始发送count计数为0
+                     logger.info("生产数据，等待数据接入!");
+                 }
+            }
+        }
+    }
+
+
+        /**
+     * 往zx发送文件数据的消息,即发送文件的message数据(结构化数据)
+     * 本来是作为文件消息发送,现该方法主要用于单条发送数据-20191224
+     *
+     * @param transaction
+     * @param contents
+     */
+    private void sendMsgLog(Transaction transaction, List<String> contents) {
+
+        try {
+
+            logger.info("Current sendMsgLog Thread number ID ：" + Thread.currentThread().getId());
+
+            /**
+             * 获取状态回传sessionID,检查认证是否存在
+             */
+           if (StringUtils.isBlank(monitorSessionCookie)
+                || StringUtils.isBlank(msgSessionCookie)) {
+                getMonitorSessionCookie();//sendMsgLog-首次获取monitorSessionCookie
+                getMsgSessionCookie();//sendMsgLog-msgSessionCookie为空,首次接入验证
+                if (!checkTimerStart) {
+                    checkCookieEveryWeek();//sendMsgLog-第一次启动检测到monitorSessionCookie为空时启动任务但不进行验证,后续间隔一段时间后开始验证,每次申请monitorSessionCookie和msgSessionCookie两个Cookie
+                    checkTimerStart = true;
+                    logger.debug("CheckMsgAndFileCookie Timer is started......");
+                }
+
+                if (!monitorStart) {//消息定时上报
+                    AvroMonitorTimerTask.monitorMsg(monitorSessionCookie, postMsgUrl,
+                            "monitor-msg", 1, userAgent, topicName);//sendMsgLog-日志消息
+                    monitorStart = true;
+                    logger.debug("MonitorMsg Timer is started......");
+                }
+
+
+                if (!redirectContentsPostStart) {
+                    postRedirectDataEveryMin();
+                    redirectContentsPostStart = true;
+                    logger.debug("RedirectContents Timer Post is started......");
+                }
+            }
+
+
             AvroMonitorTimerTask.addTotalNum(contents.size());
-            logger.info("AC msg sessionId already exists,msg sessionId is ===>" + msgSessionCookie);
+            logger.debug("AC msg sessionId already exists,msg sessionId is ===>" + msgSessionCookie);
             AvroMonitorTimerTask.addReadyPostNum(contents.size());
             if (isSingle(topicName)) {
                 for (String content : contents) {
@@ -371,28 +515,56 @@ public class YbHttpAvroSinkFile extends AbstractSink implements Configurable {
             } else {
                 long beginAvroTime = System.currentTimeMillis();
                 byte[] msgResults = HttpClientUtil.encapsulationData(topicName, contents);
-                logger.info("Batch Avro and Encapsulation Data Time(ms)："+ (System.currentTimeMillis() - beginAvroTime) );
-                pool.execute(new Runnable() {
-                    @Override
-                    public void run() {
-                        try {
-                            HttpClientUtil.asyncProducerAvroMessageToZX(postMsgUrl, topicName, msgResults, contents.get(0),
-                                    userAgent, msgSessionCookie, contents.size(), System.currentTimeMillis());//初始发送count计数为0
-                        } catch (Exception e) {
-                            logger.error("sendMsgLog multi-thread is error==>" + e + "<==,Thread is==>" + Thread.currentThread().getName() + "<==.");
+                logger.debug("Batch Avro and Encapsulation Data Time(ms)："+ (System.currentTimeMillis() - beginAvroTime) );
+                HttpClientUtil.asyncProducerAvroMessageToZX_bk(postMsgUrl, topicName, msgResults, contents.get(0),
+                        userAgent, msgSessionCookie, contents.size(), System.currentTimeMillis());
+              /*  for (String content : contents) {
+                    HttpClientUtil.asyncProducerAvroMessageToZX_bk(postMsgUrl, topicName, msgResults, contents.get(0),
+                            userAgent, msgSessionCookie, contents.size(), System.currentTimeMillis());//初始发送count计数为0
+                }*/
+
+
+              /*for (String content : contents) {
+
+                    pool.execute(new Runnable() {
+                        @Override
+                        public void run() {
+                            try {
+
+                                HttpClientUtil.asyncProducerAvroMessageToZX_bk(postMsgUrl, topicName, msgResults, contents.get(0),
+                                        userAgent, msgSessionCookie, contents.size(), System.currentTimeMillis());
+                            } catch (Exception e) {
+                                logger.error("sendMsgLog multi-thread is error==>" + e + "<==,Thread is==>" + Thread.currentThread().getName() + "<==.");
+                            }
                         }
-                    }
-                });
+                    });
+                }*/
+
+         /*    for (String content : contents) {
+
+                    pool.execute(new Runnable() {
+                        @Override
+                        public void run() {
+                            try {
+                                SinkService.getInstance().producerAvroMessageToBus(postMsgUrl, topicName, msgResults, contents.get(0),
+                                        userAgent, msgSessionCookie, contents.size());
+                            } catch (Exception e) {
+                                logger.error("sendMsgLog multi-thread is error==>" + e + "<==,Thread is==>" + Thread.currentThread().getName() + "<==.");
+                            }
+                        }
+                    });
+                }*/
+
             }
 
         } catch (Exception e) {
-            logger.error("YbHttpAvroSinkFile send Msg is error===>" + e + "<===");
-            transaction.commit();
-        } finally {
-            if (transaction != null) {
+                logger.error("YbHttpAvroSinkFile send Msg is error===>" + e + "<===");
                 transaction.commit();
-            }
-            AvroMonitorTimerTask.subReadyPostNum(contents.size());
+            } finally {
+                if (transaction != null) {
+                    transaction.commit();
+                }
+                AvroMonitorTimerTask.subReadyPostNum(contents.size());
         }
     }
 

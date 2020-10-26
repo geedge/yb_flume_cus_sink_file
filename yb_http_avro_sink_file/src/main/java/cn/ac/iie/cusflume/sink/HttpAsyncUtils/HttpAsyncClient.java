@@ -131,7 +131,7 @@ public class HttpAsyncClient {
                 .register("https", new SSLIOSessionStrategy(sslcontext, NoopHostnameVerifier.INSTANCE))
                 .build();
 
-        // 配置io线程
+        // 配置io线程\
         IOReactorConfig ioReactorConfig = IOReactorConfig.custom()
                 .setSoKeepAlive(true)
                 .setTcpNoDelay(true)
@@ -185,7 +185,7 @@ public class HttpAsyncClient {
                         return Long.parseLong(value) * 1000;
                     }
                 }
-                return 10 * 1000;//如果没有约定，则默认定义时长为10s
+                return 60 * 1000;//如果没有约定，则默认定义时长为10s
             }
         };
 

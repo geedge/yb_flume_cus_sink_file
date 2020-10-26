@@ -2,6 +2,7 @@ package cn.ac.iie.cusflume.sink.HttpAsyncUtils;
 
 import cn.ac.iie.cusflume.sink.CommonUtils.GetDataDictionaryCodeByTopicUtils;
 import cn.ac.iie.cusflume.sink.CommonUtils.GetFilePathByTopicUtils;
+import cn.ac.iie.cusflume.sink.CommonUtils.HttpClientTest;
 import cn.ac.iie.cusflume.sink.HttpAsyncUtils.mail.AsyncPostMailFilesCallback;
 import cn.ac.iie.cusflume.sink.HttpAsyncUtils.msgCallBack.AsyncPostMsgCallBack;
 import cn.ac.iie.cusflume.sink.avroUtils.AvroMonitorTimerTask;
@@ -78,18 +79,18 @@ public class HttpClientUtil {
         HttpPost httpPost = new HttpPost(baseUrl);
 
         //Parameters
-        LOG.warn("==== Parameters ======" + list);
+        LOG.info("==== Parameters ======" + list);
         CloseableHttpResponse response = null;
         try {
             httpPost.setEntity(new UrlEncodedFormEntity(list));
 //            httpPost.setHeader("Connection","close");
             response = httpClient.execute(httpPost);
-            LOG.warn("========HttpResponseProxy：========" + response.getStatusLine());
+            LOG.info("========HttpResponseProxy：========" + response.getStatusLine());
             HttpEntity entity = response.getEntity();
             String result = null;
             if (entity != null) {
                 result = EntityUtils.toString(entity, "UTF-8");
-                LOG.warn("========Response=======" + result);
+                LOG.info("========Response=======" + result);
             }
             EntityUtils.consume(entity);
             return result;
@@ -814,10 +815,56 @@ public class HttpClientUtil {
 
     }
 
+    public static void asyncProducerAvroMessageToZX(String urlProducer,String topic, byte[] results, String dataJson, String userAgent, String msgSessionCookie, int count, long postTime) throws IOException {
+        HttpClientTest.producerAvroMessageToZX(urlProducer, topic, results, dataJson, userAgent, msgSessionCookie, count, postTime);
+    }
+
+
+    public static void asyncProducerAvroMessageToZX_toBatch(String urlProducer,String topic, byte[] results, String dataJson, String userAgent, String msgSessionCookie, int count, long postTime) {
+        HttpPost httpPost = null;
+        urlProducer = urlProducer.trim();
+        CloseableHttpAsyncClient httpClient = null;
+        try {
+            httpClient = HttpClientFactory.getInstance().getHttpAsyncClientPool().getAsyncHttpClient();
+            httpClient.start();
+            httpPost = new HttpPost(urlProducer);
+            httpPost.addHeader("User-Agent", userAgent);
+            httpPost.setHeader(HTTP.CONN_DIRECTIVE, HTTP.CONN_KEEP_ALIVE);
+            httpPost.addHeader("Cookie", msgSessionCookie);
+            String md5Avro = MD5Utils.md5Encode(results);
+            httpPost.addHeader("Checksum", md5Avro);
+            logger.info("批量发送body Checksum MD5 为:" + md5Avro);
+            httpPost.addHeader("Content-Type", "binary/octet-stream");
+            httpPost.addHeader("X-Tag", "getXTAG(dataJson, topic)");
+            ByteArrayEntity payload = new ByteArrayEntity(results);
+            payload.setContentEncoding("utf-8");
+            httpPost.setEntity(payload);
+            AsyncPostMsgCallBack asyncPostMsgCallBack = new AsyncPostMsgCallBack(urlProducer, topic, dataJson, userAgent, msgSessionCookie, count, postTime);
+            httpClient.execute(httpPost, asyncPostMsgCallBack);
+            logger.info("当前Thread number ID ：" + Thread.currentThread().getId());
+        } catch (MalformedURLException e) {
+            //执行URL url = new URL()的异常
+            e.printStackTrace();
+        } catch (ClientProtocolException e) {
+            // 执行httpClient.execute(httpGet)的异常
+            e.printStackTrace();
+        } catch (IOException e) {
+            // 执行httpClient.execute(httpGet)的异常
+            logger.error("asyncProducerAvroToZX is IOException===>>>" + e.getMessage() + "<<<===IOException Message is==>" + dataJson + "<==");//进一步细化日志
+            e.printStackTrace();
+        } catch (Exception e) {
+            //handle response here... try other servers
+            logger.error("asyncProducerAvroToZX is Exception===>>>" + e.getMessage() + "<<<===Exception Message is==>" + dataJson + "<==");//进一步细化日志
+            e.printStackTrace();
+        }
+
+    }
+
+
     /**
      * 批量生产消息-总线
      */
-    public static void asyncProducerAvroMessageToZX(String urlProducer,String topic, byte[] results, String dataJson, String userAgent, String msgSessionCookie, int count, long postTime) {
+    public static void asyncProducerAvroMessageToZX_bk(String urlProducer,String topic, byte[] results, String dataJson, String userAgent, String msgSessionCookie, int count, long postTime) {
         HttpPost httpPost = null;
         urlProducer = urlProducer.trim();
         CloseableHttpAsyncClient httpClient = null;
@@ -838,6 +885,7 @@ public class HttpClientUtil {
             httpPost.setEntity(payload);
             AsyncPostMsgCallBack asyncPostMsgCallBack = new AsyncPostMsgCallBack(urlProducer, topic, dataJson, userAgent, msgSessionCookie, count, postTime);
             httpClient.execute(httpPost, asyncPostMsgCallBack);
+            logger.info("当前Thread number ID ：" + Thread.currentThread().getId());
         } catch (MalformedURLException e) {
             //执行URL url = new URL()的异常
             e.printStackTrace();
@@ -1169,7 +1217,7 @@ public class HttpClientUtil {
      * @param dataJson
      * @return
      */
-    private static String getXTAG(String dataJson, String topic) {
+    public static String getXTAG(String dataJson, String topic) {
         if ("monitor-msg".equals(topic) || "INFLUX-SAPP-BPS-STAT-LOG".equals(topic)) {
             return RealtimeCountConfig.MONITOR_NOFILE_MSG_X_TAG;
         }

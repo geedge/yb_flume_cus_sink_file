@@ -167,8 +167,9 @@ public class AsyncHttpClientPostFileCallback implements FutureCallback<HttpRespo
             int statusCode = response.getStatusLine().getStatusCode();
             if (statusCode == 200) {
                 LOG.info("AsyncHttpClientPostFileCallback completed,post file statuscode is:{" + statusCode + "},now start to send message to zx.");
-                //post文件成功后可以获取文件id
                 String postResBody = getHttpContent(response);
+                /*  //post文件成功后可以获取文件id
+
                 System.out.println("Post File to zx resBody====>" + postResBody);
                 if (StringUtils.isNotBlank(postResBody)) {
                     this.postFileResBody = JSONObject.parseObject(postResBody, PostFileResBody.class);
@@ -185,7 +186,7 @@ public class AsyncHttpClientPostFileCallback implements FutureCallback<HttpRespo
                     LOG.info("Send message with fileId to zx over,this responseBody is===>" + proResBody.toString());
                 } else {
                     LOG.warn("AsyncHttpClientPostFileCallback post file success but postResBody(response body) is null.");
-                }
+                }*/
             } else if (statusCode == 403) {//空文件,不再重试发送
                 LOG.error("AsyncHttpClientPostFileCallback post zxFile statusCode is 403 so get the fileIs but this minio file is empty.This message is===>>>" + sendMsg + "<<<===");
             } else {
@@ -196,7 +197,7 @@ public class AsyncHttpClientPostFileCallback implements FutureCallback<HttpRespo
             e.printStackTrace();
         }
 
-        HttpClientUtils.closeQuietly(response);
+       HttpClientUtils.closeQuietly(response);
     }
 
     /**
@@ -227,7 +228,7 @@ public class AsyncHttpClientPostFileCallback implements FutureCallback<HttpRespo
             if (count > 1) {
                 LOG.warn("AsyncHttpClientPostFileCallback post zxFile is failed,retry count=" + count);
             }
-            if (count > 4) {
+           /* if (count > 4) {
                 LOG.error("AsyncHttpClientPostFileCallback post zxFile is failed and already retry 3 times.error===>>>" + e + "<<<===.This message is===>>>" + sendMsg + "<<<===");
             } else {
                 if (configInfo != null && StringUtils.isNotBlank(sendMsg) && resultIs != null) {
@@ -236,7 +237,7 @@ public class AsyncHttpClientPostFileCallback implements FutureCallback<HttpRespo
                     //重试时也是以之前存储的流的形式发往总线
                     HttpClientUtil.httpAsyncPostFileToZx(configInfo.getPostFileUrl(), resultIs, asyncHttpClientPostFileCallback);
                 }
-            }
+            }*/
         } catch (Exception e2) {
             LOG.error("AsyncHttpClientGetFileCallback retry is error===>>>" + e2);
         }
@@ -253,7 +254,7 @@ public class AsyncHttpClientPostFileCallback implements FutureCallback<HttpRespo
             if (count > 1) {
                 LOG.warn("AsyncHttpClientPostFileCallback post zxFile statusCode is abnormal,retry count=" + count);
             }
-            if (count > 4) {
+          /*  if (count > 4) {
                 LOG.error("AsyncHttpClientPostFileCallback post zxFile statusCode is abnormal and already retry 3 times.statusCode is{" + statusCode + "}.This message is===>>>" + sendMsg + "<<<===");
             } else {
                 if (configInfo != null && StringUtils.isNotBlank(sendMsg) && resultIs != null) {
@@ -262,7 +263,7 @@ public class AsyncHttpClientPostFileCallback implements FutureCallback<HttpRespo
                     //重试时也是以之前存储的流的形式发往总线
                     HttpClientUtil.httpAsyncPostFileToZx(configInfo.getPostFileUrl(), resultIs, asyncHttpClientPostFileCallback);
                 }
-            }
+            }*/
         } catch (Exception e2) {
             LOG.error("AsyncHttpClientGetFileCallback retry is error===>>>" + e2);
         }
