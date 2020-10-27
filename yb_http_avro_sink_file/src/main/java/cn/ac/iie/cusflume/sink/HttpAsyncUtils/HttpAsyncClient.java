@@ -68,6 +68,7 @@ public class HttpAsyncClient {
     private CloseableHttpAsyncClient proxyAsyncHttpClient;
 
     public HttpAsyncClient() {
+
         try {
             this.asyncHttpClient = createAsyncClient(false);
             this.proxyAsyncHttpClient = createAsyncClient(true);
@@ -131,7 +132,7 @@ public class HttpAsyncClient {
                 .register("https", new SSLIOSessionStrategy(sslcontext, NoopHostnameVerifier.INSTANCE))
                 .build();
 
-        // 配置io线程\
+        // 配置io线程
         IOReactorConfig ioReactorConfig = IOReactorConfig.custom()
                 .setSoKeepAlive(true)
                 .setTcpNoDelay(true)

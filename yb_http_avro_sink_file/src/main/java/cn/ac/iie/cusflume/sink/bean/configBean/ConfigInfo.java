@@ -9,7 +9,8 @@ package cn.ac.iie.cusflume.sink.bean.configBean;
  */
 public class ConfigInfo {
 
-    private String postMsgUrl;
+    private String singleProduceUrl;
+    private String batchProduceUrl;
     private String postFileUrl;
 
     private String checkMsgUrl;
@@ -26,12 +27,20 @@ public class ConfigInfo {
     private String xTag;
     private int batchSize;
 
-    public String getPostMsgUrl() {
-        return postMsgUrl;
+    public String getSingleProduceUrl() {
+        return singleProduceUrl;
     }
 
-    public void setPostMsgUrl(String postMsgUrl) {
-        this.postMsgUrl = postMsgUrl;
+    public void setSingleProduceUrl(String singleProduceUrl) {
+        this.singleProduceUrl = singleProduceUrl;
+    }
+
+    public String getBatchProduceUrl() {
+        return batchProduceUrl;
+    }
+
+    public void setBatchProduceUrl(String batchProduceUrl) {
+        this.batchProduceUrl = batchProduceUrl;
     }
 
     public String getPostFileUrl() {
@@ -126,7 +135,8 @@ public class ConfigInfo {
     @Override
     public String toString() {
         return "ConfigInfo{" +
-                "postMsgUrl='" + postMsgUrl + '\'' +
+                ", singleProduceUrl='" + singleProduceUrl + '\'' +
+                ", batchProduceUrl='" + batchProduceUrl + '\'' +
                 ", postFileUrl='" + postFileUrl + '\'' +
                 ", checkMsgUrl='" + checkMsgUrl + '\'' +
                 ", checkFileUrl='" + checkFileUrl + '\'' +

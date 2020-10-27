@@ -52,7 +52,7 @@ public class AsyncHttpClientGetFileCallback implements FutureCallback<HttpRespon
     public AsyncHttpClientGetFileCallback(ConfigInfo configInfo, String getFileUrl, String sendMsg, AsyncHttpClientPostFileCallback asyncHttpClientPostFileCallback, int count) {
         this.configInfo = configInfo;
         this.postFileUrl = configInfo.getPostFileUrl();//通过configInfo赋值
-        this.postMsgUrl = configInfo.getPostMsgUrl();//通过configInfo赋值
+        this.postMsgUrl = configInfo.getSingleProduceUrl();//通过configInfo赋值
         this.getFileUrl = getFileUrl;
         this.sendMsg = sendMsg;
         this.asyncHttpClientPostFileCallback = asyncHttpClientPostFileCallback;

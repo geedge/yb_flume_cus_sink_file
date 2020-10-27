@@ -4,8 +4,8 @@ import cn.ac.iie.cusflume.sink.CommonUtils.GetDataDictionaryCodeByTopicUtils;
 import cn.ac.iie.cusflume.sink.CommonUtils.GetFilePathByTopicUtils;
 import cn.ac.iie.cusflume.sink.CommonUtils.HttpClientTest;
 import cn.ac.iie.cusflume.sink.HttpAsyncUtils.mail.AsyncPostMailFilesCallback;
-import cn.ac.iie.cusflume.sink.HttpAsyncUtils.msgCallBack.AsyncPostMsgCallBack;
-import cn.ac.iie.cusflume.sink.avroUtils.AvroMonitorTimerTask;
+import cn.ac.iie.cusflume.sink.HttpAsyncUtils.msgCallBack.AsyncBatchMsgCallBack;
+import cn.ac.iie.cusflume.sink.HttpAsyncUtils.msgCallBack.AsyncSingleMsgCallBack;
 import cn.ac.iie.cusflume.sink.avroUtils.MD5Utils;
 import cn.ac.iie.cusflume.sink.avroUtils.avroRecord.GetAvroRecordByTopicUtils;
 import cn.ac.iie.cusflume.sink.avroUtils.avroSchema.GetAvroSchemaByTopicUtils;
@@ -21,7 +21,6 @@ import org.apache.avro.io.DatumWriter;
 import org.apache.avro.io.EncoderFactory;
 import org.apache.avro.specific.SpecificDatumWriter;
 import org.apache.http.HttpEntity;
-import org.apache.http.HttpResponse;
 import org.apache.http.client.ClientProtocolException;
 import org.apache.http.client.entity.UrlEncodedFormEntity;
 import org.apache.http.client.methods.CloseableHttpResponse;
@@ -42,11 +41,12 @@ import org.apache.log4j.Logger;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
-import java.io.InputStream;
 import java.net.MalformedURLException;
 import java.net.URI;
 import java.text.SimpleDateFormat;
 import java.util.*;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -55,347 +55,22 @@ import java.util.concurrent.Executors;
  * 执行请求发送
  */
 public class HttpClientUtil {
-
-    private static Logger LOG = Logger.getLogger(HttpClientUtil.class);
+    private static HashMap<String, Schema> schemaHashMap = new HashMap<String, Schema>();//用于存放Schma
+    private static Logger logger = Logger.getLogger(HttpClientUtil.class);
 
     protected static ExecutorService pool = Executors.newFixedThreadPool(RealtimeCountConfig.HTTP_ASYNC_PARALLELISM);//线程池
+
+    private final static BlockingQueue<String> retryQueue = new ArrayBlockingQueue(100000);
 
     private static String utf8Charset = "utf-8";
 
     private static final MediaType JSON
             = MediaType.parse("application/json; charset=utf-8");
 
-    /**
-     * 向指定的url发送一次post请求,参数是List<NameValuePair>
-     *
-     * @param baseUrl 请求地址
-     * @param list    请求参数,格式是List<NameValuePair>
-     * @return 返回结果, 请求失败时返回null
-     * @apiNote http接口处用 @RequestParam接收参数
-     */
-    public static String httpSyncPost(String baseUrl, List<BasicNameValuePair> list) {
-
-        CloseableHttpClient httpClient = HttpClientFactory.getInstance().getHttpSyncClientPool().getHttpClient();
-        HttpPost httpPost = new HttpPost(baseUrl);
-
-        //Parameters
-        LOG.info("==== Parameters ======" + list);
-        CloseableHttpResponse response = null;
-        try {
-            httpPost.setEntity(new UrlEncodedFormEntity(list));
-//            httpPost.setHeader("Connection","close");
-            response = httpClient.execute(httpPost);
-            LOG.info("========HttpResponseProxy：========" + response.getStatusLine());
-            HttpEntity entity = response.getEntity();
-            String result = null;
-            if (entity != null) {
-                result = EntityUtils.toString(entity, "UTF-8");
-                LOG.info("========Response=======" + result);
-            }
-            EntityUtils.consume(entity);
-            return result;
-        } catch (Exception e) {
-            e.printStackTrace();
-        } finally {
-            if (response != null) {
-                try {
-                    response.close();
-                } catch (IOException e) {
-                    e.printStackTrace();
-                }
-            }
-        }
-        return null;
-    }
-
-    /**
-     * 向指定的url发送一次post请求,参数是字符串
-     *
-     * @param baseUrl    请求地址
-     * @param postString 请求参数,格式是json.toString()
-     * @return 返回结果, 请求失败时返回null
-     * @apiNote http接口处用 @RequestBody接收参数
-     */
-    public static String httpSyncPost(String baseUrl, String postString) {
-
-        CloseableHttpClient httpClient = HttpClientFactory.getInstance().getHttpSyncClientPool().getHttpClient();
-        HttpPost httpPost = new HttpPost(baseUrl);
-        //parameters
-        LOG.warn("==== Parameters ======" + postString);
-        CloseableHttpResponse response = null;
-        try {
-            if (postString == null || "".equals(postString)) {
-                throw new Exception("missing post String");
-            }
-
-            StringEntity stringEntity = new StringEntity(postString.toString(), utf8Charset);
-            stringEntity.setContentEncoding("UTF-8");
-            stringEntity.setContentType("application/json");
-            httpPost.setEntity(stringEntity);
-
-            response = httpClient.execute(httpPost);
-            LOG.warn("========HttpResponseProxy：========" + response.getStatusLine());
-            HttpEntity entity = response.getEntity();
-            String result = null;
-            if (entity != null) {
-                result = EntityUtils.toString(entity, "UTF-8");
-                LOG.warn("========Response=======" + result);
-            }
-            EntityUtils.consume(entity);
-            return result;
-        } catch (Exception e) {
-            e.printStackTrace();
-        } finally {
-            if (response != null) {
-                try {
-                    response.close();
-                } catch (IOException e) {
-                    e.printStackTrace();
-                }
-            }
-        }
-        return null;
-    }
 
 
-    /**
-     * 向指定的url发送一次get请求,参数是List<NameValuePair>
-     *
-     * @param baseUrl 请求地址
-     * @param list    请求参数,格式是List<NameValuePair>
-     * @return 返回结果, 请求失败时返回null
-     * @apiNote http接口处用 @RequestParam接收参数
-     */
-    public static String httpSyncGet(String baseUrl, List<BasicNameValuePair> list) {
-
-        CloseableHttpClient httpClient = HttpClientFactory.getInstance().getHttpSyncClientPool().getHttpClient();
-        HttpGet httpGet = new HttpGet(baseUrl);
-        //Parameters
-        LOG.warn("==== Parameters ======" + list);
-        CloseableHttpResponse response = null;
-        try {
-
-            if (list != null) {
-                String getUrl = EntityUtils
-                        .toString(new UrlEncodedFormEntity(list));
-                httpGet.setURI(new URI(httpGet.getURI().toString()
-                        + "?" + getUrl));
-            } else {
-                httpGet.setURI(new URI(httpGet.getURI().toString()));
-            }
-
-            response = httpClient.execute(httpGet);
-            LOG.warn("========HttpResponseProxy：========" + response.getStatusLine());
-            HttpEntity entity = response.getEntity();
-            String result = null;
-            if (entity != null) {
-                result = EntityUtils.toString(entity, "UTF-8");
-                LOG.warn("========Response=======" + result);
-            }
-            EntityUtils.consume(entity);
-            return result;
-        } catch (Exception e) {
-            e.printStackTrace();
-        } finally {
-            if (response != null) {
-                try {
-                    response.close();
-                } catch (IOException e) {
-                    e.printStackTrace();
-                }
-            }
-        }
-        return null;
-    }
-
-    /**
-     * 向指定的url发送一次get请求,参数是字符串
-     *
-     * @param baseUrl   请求地址
-     * @param urlParams 请求参数,格式是String
-     * @return 返回结果, 请求失败时返回null
-     * @apiNote http接口处用 @RequestParam接收参数
-     */
-    public static String httpSyncGet(String baseUrl, String urlParams) {
-
-        CloseableHttpClient httpClient = HttpClientFactory.getInstance().getHttpSyncClientPool().getHttpClient();
-        HttpGet httpGet = new HttpGet(baseUrl);
-        //Parameters
-        LOG.warn("==== Parameters ======" + urlParams);
-        CloseableHttpResponse response = null;
-        try {
-
-            if (null != urlParams || "".equals(urlParams)) {
-
-                httpGet.setURI(new URI(httpGet.getURI().toString()
-                        + "?" + urlParams));
-            } else {
-                httpGet.setURI(new URI(httpGet.getURI().toString()));
-            }
-
-            response = httpClient.execute(httpGet);
-            LOG.warn("========HttpResponseProxy：========" + response.getStatusLine());
-            HttpEntity entity = response.getEntity();
-            String result = null;
-            if (entity != null) {
-                result = EntityUtils.toString(entity, "UTF-8");
-                LOG.warn("========Response=======" + result);
-            }
-            EntityUtils.consume(entity);
-            return result;
-        } catch (Exception e) {
-            e.printStackTrace();
-        } finally {
-            if (response != null) {
-                try {
-                    response.close();
-                } catch (IOException e) {
-                    e.printStackTrace();
-                }
-            }
-        }
-        return null;
-    }
-
-
-    /**
-     * 向指定的url发送一次get请求,参数是字符串
-     *
-     * @param baseUrl 请求地址
-     * @return 返回结果, 请求失败时返回null
-     * @apiNote http接口处用 @RequestParam接收参数
-     */
-    public static String httpSyncGet(String baseUrl) {
-
-        CloseableHttpClient httpClient = HttpClientFactory.getInstance().getHttpSyncClientPool().getHttpClient();
-        HttpGet httpGet = new HttpGet(baseUrl);
-
-        CloseableHttpResponse response = null;
-        try {
-            httpGet.setURI(new URI(httpGet.getURI().toString()));
-            response = httpClient.execute(httpGet);
-            LOG.warn("========HttpResponseProxy：========" + response.getStatusLine());
-            HttpEntity entity = response.getEntity();
-            String result = null;
-            if (entity != null) {
-                result = EntityUtils.toString(entity, "UTF-8");
-                LOG.warn("========Response=======" + result);
-            }
-            EntityUtils.consume(entity);
-            return result;
-        } catch (Exception e) {
-            e.printStackTrace();
-        } finally {
-            if (response != null) {
-                try {
-                    response.close();
-                } catch (IOException e) {
-                    e.printStackTrace();
-                }
-            }
-        }
-        return null;
-    }
-
-
-    /**
-     * 向指定的url发送一次异步post请求,参数是字符串
-     *
-     * @param baseUrl    请求地址
-     * @param postString 请求参数,格式是json.toString()
-     * @param urlParams  请求参数,格式是String
-     * @param callback   回调方法,格式是FutureCallback
-     * @return 返回结果, 请求失败时返回null
-     * @apiNote http接口处用 @RequestParam接收参数
-     */
-    public static void httpAsyncPost(String baseUrl, String postString,
-                                     String urlParams, FutureCallback callback) throws Exception {
-        if (baseUrl == null || "".equals(baseUrl)) {
-            LOG.warn("we don't have base url, check config");
-            throw new Exception("missing base url");
-        }
-        CloseableHttpAsyncClient hc = HttpClientFactory.getInstance().getHttpAsyncClientPool()
-                .getAsyncHttpClient();
-        try {
-            hc.start();
-            HttpPost httpPost = new HttpPost(baseUrl);
-
-//            httpPost.setHeader("Connection","close");
-
-            if (null != postString) {
-                LOG.debug("exeAsyncReq post postBody={" + postString + "}");
-                StringEntity entity = new StringEntity(postString.toString(), utf8Charset);
-                entity.setContentEncoding("UTF-8");
-                entity.setContentType("application/json");
-                httpPost.setEntity(entity);
-            }
-
-            if (null != urlParams) {
-
-                httpPost.setURI(new URI(httpPost.getURI().toString()
-                        + "?" + urlParams));
-            }
-
-            LOG.warn("exeAsyncReq getparams:" + httpPost.getURI());
-
-            hc.execute(httpPost, callback);
-
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-    }
-
-
-    /**
-     * 向指定的url发送一次异步post请求,参数是字符串
-     *
-     * @param baseUrl   请求地址
-     * @param urlParams 请求参数,格式是List<BasicNameValuePair>
-     * @param callback  回调方法,格式是FutureCallback
-     * @return 返回结果, 请求失败时返回null
-     * @apiNote http接口处用 @RequestParam接收参数
-     */
-    public static void httpAsyncPost(String baseUrl, List<BasicNameValuePair> postBody,
-                                     List<BasicNameValuePair> urlParams, FutureCallback callback) throws Exception {
-        if (baseUrl == null || "".equals(baseUrl)) {
-            LOG.warn("we don't have base url, check config");
-            throw new Exception("missing base url");
-        }
-
-        try {
-            CloseableHttpAsyncClient hc = HttpClientFactory.getInstance().getHttpAsyncClientPool()
-                    .getAsyncHttpClient();
-
-            hc.start();
-
-            HttpPost httpPost = new HttpPost(baseUrl);
-
-//            httpPost.setHeader("Connection","close");
-
-            if (null != postBody) {
-                LOG.debug("exeAsyncReq post postBody={" + postBody + "}");
-                UrlEncodedFormEntity entity = new UrlEncodedFormEntity(
-                        postBody, "UTF-8");
-                httpPost.setEntity(entity);
-            }
-
-            if (null != urlParams) {
-
-                String getUrl = EntityUtils
-                        .toString(new UrlEncodedFormEntity(urlParams));
-
-                httpPost.setURI(new URI(httpPost.getURI().toString()
-                        + "?" + getUrl));
-            }
-
-            LOG.warn("exeAsyncReq getparams:" + httpPost.getURI());
-
-
-            hc.execute(httpPost, callback);
-
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
+    public static  BlockingQueue<String> getRetryQueue() {
+        return retryQueue;
     }
 
     /**
@@ -409,7 +84,7 @@ public class HttpClientUtil {
      */
     public static void httpAsyncPostFileToZx(String baseUrl, byte[] fileIs, AsyncHttpClientPostFileCallback callback) throws Exception {
         if (baseUrl == null || "".equals(baseUrl)) {
-            LOG.warn("we don't have base url, check config");
+            logger.warn("we don't have base url, check config");
             throw new Exception("missing base url");
         }
 
@@ -433,7 +108,7 @@ public class HttpClientUtil {
             if (null != fileIs) {
                 httpPut.setEntity(new ByteArrayEntity(fileIs));
             }
-            LOG.info("File httpPut.getURI()===>>>" + httpPut.getURI());
+            logger.info("File httpPut.getURI()===>>>" + httpPut.getURI());
 
             localContext.setAttribute(HttpClientContext.COOKIE_STORE, cookieStore);
 
@@ -454,7 +129,7 @@ public class HttpClientUtil {
      */
     public static void httpAsyncPostFileToZx(String baseUrl, byte[] fileIs, AsyncPostMailFilesCallback callback) throws Exception {
         if (baseUrl == null || "".equals(baseUrl)) {
-            LOG.warn("we don't have base url, check config");
+            logger.warn("we don't have base url, check config");
             throw new Exception("missing base url");
         }
 
@@ -478,7 +153,7 @@ public class HttpClientUtil {
             if (null != fileIs) {
                 httpPut.setEntity(new ByteArrayEntity(fileIs));
             }
-            LOG.info("File httpPut.getURI()===>>>" + httpPut.getURI());
+            logger.info("File httpPut.getURI()===>>>" + httpPut.getURI());
 
             localContext.setAttribute(HttpClientContext.COOKIE_STORE, cookieStore);
 
@@ -503,7 +178,7 @@ public class HttpClientUtil {
     public static void httpAsyncGetFile(String baseUrl, FutureCallback callback) throws Exception {
 
         if (baseUrl == null || "".equals(baseUrl)) {
-            LOG.warn("we don't have base url, check config");
+            logger.warn("we don't have base url, check config");
             throw new Exception("missing base url");
         }
         CloseableHttpAsyncClient hc = HttpClientFactory.getInstance().getHttpAsyncClientPool().getAsyncHttpClient();
@@ -523,7 +198,7 @@ public class HttpClientUtil {
 //            }
 
 //            LOG.info("exeAsyncReq getparams:" + httpGet.getURI());
-            LOG.info("File httpGet.getURI()===>>>" + httpGet.getURI());
+            logger.info("File httpGet.getURI()===>>>" + httpGet.getURI());
             hc.execute(httpGet, callback);
         } catch (Exception e) {
             e.printStackTrace();
@@ -545,7 +220,7 @@ public class HttpClientUtil {
     public static void httpAsyncGet(String baseUrl, String urlParams, FutureCallback callback) throws Exception {
 
         if (baseUrl == null || "".equals(baseUrl)) {
-            LOG.warn("we don't have base url, check config");
+            logger.warn("we don't have base url, check config");
             throw new Exception("missing base url");
         }
         CloseableHttpAsyncClient hc = HttpClientFactory.getInstance().getHttpAsyncClientPool()
@@ -567,7 +242,7 @@ public class HttpClientUtil {
                 httpGet.setURI(new URI(httpGet.getURI().toString()));
             }
 
-            LOG.warn("exeAsyncReq getparams:" + httpGet.getURI());
+            logger.warn("exeAsyncReq getparams:" + httpGet.getURI());
 
 
             hc.execute(httpGet, callback);
@@ -590,7 +265,7 @@ public class HttpClientUtil {
      */
     public static void httpAsyncGet(String baseUrl, List<BasicNameValuePair> urlParams, FutureCallback callback) throws Exception {
         if (baseUrl == null || "".equals(baseUrl)) {
-            LOG.warn("we don't have base url, check config");
+            logger.warn("we don't have base url, check config");
             throw new Exception("missing base url");
         }
 
@@ -613,7 +288,7 @@ public class HttpClientUtil {
                         + "?" + getUrl));
             }
 
-            LOG.warn("exeAsyncReq getparams:" + httpGet.getURI());
+            logger.warn("exeAsyncReq getparams:" + httpGet.getURI());
 
 
             hc.execute(httpGet, callback);
@@ -621,126 +296,6 @@ public class HttpClientUtil {
         } catch (Exception e) {
             e.printStackTrace();
         }
-    }
-
-
-    public static String OkSyncPost(String url, String json) throws IOException {
-
-        OkHttpClient okClient = HttpClientFactory.getInstance().getOkClientPool().getHttpClient();
-
-        RequestBody body = RequestBody.create(JSON, json);
-        Request request = new Request.Builder()
-                .url(url)
-                .post(body)
-                .build();
-        try (Response response = okClient.newCall(request).execute()) {
-
-            return response.body().string();
-        }
-    }
-
-    public static void OkAsyncPost(String url, String json) throws IOException {
-        OkHttpClient okClient = HttpClientFactory.getInstance().getOkClientPool().getHttpClient();
-
-        RequestBody body = RequestBody.create(JSON, json);
-        Request request = new Request.Builder()
-                .url(url)
-                .post(body)
-                .build();
-        Call call = okClient.newCall(request);
-        call.enqueue(new Callback() {
-            @Override
-            public void onFailure(Call call, IOException e) {
-                e.printStackTrace();
-            }
-
-            @Override
-            public void onResponse(Call call, Response response) throws IOException {
-
-                LOG.warn("OkAsyncPost回调:" + response.body().string());
-            }
-        });
-
-    }
-
-
-    public static void OkAsyncPost(String url, Map<String, String> map) throws IOException {
-        OkHttpClient okClient = HttpClientFactory.getInstance().getOkClientPool().getHttpClient();
-
-        FormBody.Builder formBodyBuilder = new FormBody.Builder();
-        for (Map.Entry<String, String> entry : map.entrySet()) {
-            formBodyBuilder.add(entry.getKey(), entry.getValue());
-        }
-        Request request = new Request.Builder()
-                .url(url)
-                .post(formBodyBuilder.build())
-                .build();
-        Call call = okClient.newCall(request);
-        call.enqueue(new Callback() {
-            @Override
-            public void onFailure(Call call, IOException e) {
-                e.printStackTrace();
-            }
-
-            @Override
-            public void onResponse(Call call, Response response) throws IOException {
-
-                LOG.warn("OkAsyncPost回调:" + response.body().string());
-            }
-        });
-
-    }
-
-    public static void OkAsyncPost(String url, Map<String, String> map, Callback callback) throws IOException {
-        OkHttpClient okClient = HttpClientFactory.getInstance().getOkClientPool().getHttpClient();
-
-        FormBody.Builder formBodyBuilder = new FormBody.Builder();
-        for (Map.Entry<String, String> entry : map.entrySet()) {
-            formBodyBuilder.add(entry.getKey(), entry.getValue());
-        }
-
-        Request request = new Request.Builder()
-                .url(url)
-                .post(formBodyBuilder.build())
-                .build();
-        Call call = okClient.newCall(request);
-        call.enqueue(callback);
-
-    }
-
-    public static String OkSyncGet(String url) throws IOException {
-
-        OkHttpClient okClient = HttpClientFactory.getInstance().getOkClientPool().getHttpClient();
-
-        Request request = new Request.Builder()
-                .url(url)
-                .build();
-        try (Response response = okClient.newCall(request).execute()) {
-
-            return response.body().string();
-        }
-    }
-
-    public static void OkAsyncGet(String url) throws IOException {
-
-        OkHttpClient okClient = HttpClientFactory.getInstance().getOkClientPool().getHttpClient();
-
-        Request request = new Request.Builder()
-                .url(url)
-                .build();
-        Call call = okClient.newCall(request);
-        call.enqueue(new Callback() {
-            @Override
-            public void onFailure(Call call, IOException e) {
-                e.printStackTrace();
-            }
-
-            @Override
-            public void onResponse(Call call, Response response) throws IOException {
-
-                LOG.warn("OkAsyncGet回调:" + response.body().string());
-            }
-        });
     }
 
 
@@ -759,14 +314,16 @@ public class HttpClientUtil {
                         httpAsyncGetFile(getFileUrl, callback);
 //                        LOG.info(Thread.currentThread().getName() + "===>run====>>>" + "success,now time is" + System.currentTimeMillis());
                     } catch (Exception e) {
-                        LOG.error("getFileAndPostFile multithreading is error===>" + e);
+                        logger.error("getFileAndPostFile multithreading is error===>" + e);
                     }
                 }
             });
         } catch (Exception e) {
-            LOG.error("getFileAndPostFile method is error===>" + e);
+            logger.error("getFileAndPostFile method is error===>" + e);
         }
     }
+
+
 
     /**
      * 对消息数据进行批量组装
@@ -815,90 +372,66 @@ public class HttpClientUtil {
 
     }
 
-    public static void asyncProducerAvroMessageToZX(String urlProducer,String topic, byte[] results, String dataJson, String userAgent, String msgSessionCookie, int count, long postTime) throws IOException {
+    /**
+     * 用于测试总线的同步发送客户端接口，不作为生产环境使用
+     * @param urlProducer
+     * @param topic
+     * @param results
+     * @param dataJson
+     * @param userAgent
+     * @param msgSessionCookie
+     * @param count
+     * @param postTime
+     * @throws IOException
+     */
+    public static void syncProducerAvroMessageTest(String urlProducer,String topic, byte[] results, String dataJson, String userAgent, String msgSessionCookie, int count, long postTime) throws IOException {
         HttpClientTest.producerAvroMessageToZX(urlProducer, topic, results, dataJson, userAgent, msgSessionCookie, count, postTime);
     }
 
 
-    public static void asyncProducerAvroMessageToZX_toBatch(String urlProducer,String topic, byte[] results, String dataJson, String userAgent, String msgSessionCookie, int count, long postTime) {
-        HttpPost httpPost = null;
-        urlProducer = urlProducer.trim();
-        CloseableHttpAsyncClient httpClient = null;
-        try {
-            httpClient = HttpClientFactory.getInstance().getHttpAsyncClientPool().getAsyncHttpClient();
-            httpClient.start();
-            httpPost = new HttpPost(urlProducer);
-            httpPost.addHeader("User-Agent", userAgent);
-            httpPost.setHeader(HTTP.CONN_DIRECTIVE, HTTP.CONN_KEEP_ALIVE);
-            httpPost.addHeader("Cookie", msgSessionCookie);
-            String md5Avro = MD5Utils.md5Encode(results);
-            httpPost.addHeader("Checksum", md5Avro);
-            logger.info("批量发送body Checksum MD5 为:" + md5Avro);
-            httpPost.addHeader("Content-Type", "binary/octet-stream");
-            httpPost.addHeader("X-Tag", "getXTAG(dataJson, topic)");
-            ByteArrayEntity payload = new ByteArrayEntity(results);
-            payload.setContentEncoding("utf-8");
-            httpPost.setEntity(payload);
-            AsyncPostMsgCallBack asyncPostMsgCallBack = new AsyncPostMsgCallBack(urlProducer, topic, dataJson, userAgent, msgSessionCookie, count, postTime);
-            httpClient.execute(httpPost, asyncPostMsgCallBack);
-            logger.info("当前Thread number ID ：" + Thread.currentThread().getId());
-        } catch (MalformedURLException e) {
-            //执行URL url = new URL()的异常
-            e.printStackTrace();
-        } catch (ClientProtocolException e) {
-            // 执行httpClient.execute(httpGet)的异常
-            e.printStackTrace();
-        } catch (IOException e) {
-            // 执行httpClient.execute(httpGet)的异常
-            logger.error("asyncProducerAvroToZX is IOException===>>>" + e.getMessage() + "<<<===IOException Message is==>" + dataJson + "<==");//进一步细化日志
-            e.printStackTrace();
-        } catch (Exception e) {
-            //handle response here... try other servers
-            logger.error("asyncProducerAvroToZX is Exception===>>>" + e.getMessage() + "<<<===Exception Message is==>" + dataJson + "<==");//进一步细化日志
-            e.printStackTrace();
-        }
-
-    }
-
-
     /**
-     * 批量生产消息-总线
+     * 异步批量发送接口
+     * @param batchProduceUrl
+     * @param topic
+     * @param results
+     * @param xTag
+     * @param userAgent
+     * @param msgSessionCookie
+     * @param count
+     * @param postTime
      */
-    public static void asyncProducerAvroMessageToZX_bk(String urlProducer,String topic, byte[] results, String dataJson, String userAgent, String msgSessionCookie, int count, long postTime) {
+    public static void batchAsyncProduceMessage(String batchProduceUrl, String topic,
+                                                       byte[] results,
+                                                       String xTag, String userAgent,
+                                                       String msgSessionCookie, int count, long postTime) {
         HttpPost httpPost = null;
-        urlProducer = urlProducer.trim();
+        batchProduceUrl = batchProduceUrl.trim();
         CloseableHttpAsyncClient httpClient = null;
         try {
             httpClient = HttpClientFactory.getInstance().getHttpAsyncClientPool().getAsyncHttpClient();
             httpClient.start();
-            httpPost = new HttpPost(urlProducer);
+            httpPost = new HttpPost(batchProduceUrl);
             httpPost.addHeader("User-Agent", userAgent);
             httpPost.setHeader(HTTP.CONN_DIRECTIVE, HTTP.CONN_KEEP_ALIVE);
             httpPost.addHeader("Cookie", msgSessionCookie);
-            String md5Avro = MD5Utils.md5Encode(results);
-            httpPost.addHeader("Checksum", md5Avro);
-            logger.info("批量发送body Checksum MD5 为:" + md5Avro);
+            String checksum = MD5Utils.md5Encode(results);
+            httpPost.addHeader("Checksum", checksum);
             httpPost.addHeader("Content-Type", "binary/octet-stream");
-            httpPost.addHeader("X-Tag", getXTAG(dataJson, topic));
+            httpPost.addHeader("X-Tag", xTag);
             ByteArrayEntity payload = new ByteArrayEntity(results);
             payload.setContentEncoding("utf-8");
             httpPost.setEntity(payload);
-            AsyncPostMsgCallBack asyncPostMsgCallBack = new AsyncPostMsgCallBack(urlProducer, topic, dataJson, userAgent, msgSessionCookie, count, postTime);
-            httpClient.execute(httpPost, asyncPostMsgCallBack);
-            logger.info("当前Thread number ID ：" + Thread.currentThread().getId());
+            AsyncBatchMsgCallBack asyncBatchMsgCallBack = new AsyncBatchMsgCallBack(batchProduceUrl, topic, checksum, count, postTime);
+            httpClient.execute(httpPost, asyncBatchMsgCallBack);
         } catch (MalformedURLException e) {
-            //执行URL url = new URL()的异常
             e.printStackTrace();
         } catch (ClientProtocolException e) {
-            // 执行httpClient.execute(httpGet)的异常
             e.printStackTrace();
         } catch (IOException e) {
-            // 执行httpClient.execute(httpGet)的异常
-            logger.error("asyncProducerAvroToZX is IOException===>>>" + e.getMessage() + "<<<===IOException Message is==>" + dataJson + "<==");//进一步细化日志
+            logger.error("IOException===>>>" + e.getMessage() + "<<<===IOException Message is==>" + batchProduceUrl + "<==");
             e.printStackTrace();
         } catch (Exception e) {
-            //handle response here... try other servers
-            logger.error("asyncProducerAvroToZX is Exception===>>>" + e.getMessage() + "<<<===Exception Message is==>" + dataJson + "<==");//进一步细化日志
+            logger.error("Other Exception===>>>" + e.getMessage() + "<<<===Exception Message is==>" + batchProduceUrl + "<==");
             e.printStackTrace();
         }
 
@@ -909,16 +442,18 @@ public class HttpClientUtil {
      * 生产AVRO数据入ZX(单条)--数据不包含schema
      * 静态,适用于异步与多线程的版本
      *
-     * @param urlProducer
+     * @param singleProduceUrl
      * @param topic
      * @param dataJson
      * @param userAgent
      * @param msgSessionCookie
      * @return
      */
-    public static void asyncProducerAvroToZX(String urlProducer, String topic, String dataJson, String userAgent, String msgSessionCookie, int count, long postTime) {
+    public static void singleAsyncProduceMessage(String singleProduceUrl, String topic,
+                                                 String dataJson, String userAgent,
+                                                 String msgSessionCookie, int count, long postTime) {
         HttpPost httpPost = null;
-        urlProducer = urlProducer.trim();
+        singleProduceUrl = singleProduceUrl.trim();
         byte[] resultArray = null;
         CloseableHttpAsyncClient httpClient = null;
         try {
@@ -961,7 +496,7 @@ public class HttpClientUtil {
                 resultArray = alreadyGetFileTagRecordSoOnlyGetMergeAllArray(topic, resultArray);
             }
 
-            httpPost = new HttpPost(urlProducer);
+            httpPost = new HttpPost(singleProduceUrl);
             // set header
             httpPost.addHeader("User-Agent", userAgent);
 
@@ -974,16 +509,11 @@ public class HttpClientUtil {
 
             httpPost.addHeader("Cookie", msgSessionCookie);//不设置Cookie时,广东测试出现报错,打开广东的Cookie设置测试一下,经测试,可用
 
-            try {
-                String md5Avro = MD5Utils.md5Encode(resultArray);
-                httpPost.addHeader("Checksum", md5Avro);
-                logger.info("请求端Checksum MD5 avro 加密为:" + md5Avro);
-                logger.debug("原始数据==>" + dataJson + "<==," +
-                        "原始数据checksum==>" + MD5Utils.md5Encode(dataJson) + "<==," +
-                        "对应请求端Checksum MD5 avro 加密为:" + md5Avro);//20200521新增,自证清白
-            } catch (Exception e) {
-                logger.error("MD5Utils.md5Encode Method is error===>>> " + e);
-            }
+
+            String md5Avro = MD5Utils.md5Encode(resultArray);
+            httpPost.addHeader("Checksum", md5Avro);
+
+
 //            httpPost.addHeader("Content-Type", "application/avro+json;charset=UTF-8");
             httpPost.addHeader("Content-Type", "binary/octet-stream");
 
@@ -999,22 +529,16 @@ public class HttpClientUtil {
             ByteArrayEntity payload = new ByteArrayEntity(resultArray);
             payload.setContentEncoding("utf-8");
             //payload.setContentType("text/xml; charset=UTF-8");
-            // anti avro
             httpPost.setEntity(payload);
-
-
-            logger.info("最终加载内容字节数组长度: " + resultArray.length);
-//            logger.debug("封装数据==>" + dataJson + "<==最终加载内容字节数组长度: " + resultArray.length);//20200428进一步细化日志
-            logger.debug("原始数据==>" + dataJson + "<==," +
+//          logger.debug("封装数据==>" + dataJson + "<==最终加载内容字节数组长度: " + resultArray.length);//20200428进一步细化日志
+            logger.info("原始数据==>" + dataJson + "<==," +
                     "原始数据checksum==>" + MD5Utils.md5Encode(dataJson) + "<==," +
                     "数据处理时间handleTime==>" + (System.currentTimeMillis() - postTime) + "<==," +
                     "最终加载内容字节数组长度: " + resultArray.length + "," +
-                    "最终加载内容字节数组:" + Arrays.toString(resultArray));//20200521进一步细化日志
-
+                    "对应请求端Checksum MD5 avro 加密为:" + md5Avro);//20200521进一步细化日志
             //执行请求
-            AsyncPostMsgCallBack asyncPostMsgCallBack = new AsyncPostMsgCallBack(urlProducer, topic, dataJson, userAgent, msgSessionCookie, count, postTime);
+            AsyncSingleMsgCallBack asyncPostMsgCallBack = new AsyncSingleMsgCallBack(singleProduceUrl, topic, dataJson, userAgent, msgSessionCookie, count, postTime);
             httpClient.execute(httpPost, asyncPostMsgCallBack);
-
         } catch (MalformedURLException e) {
             //执行URL url = new URL()的异常
             e.printStackTrace();
@@ -1023,11 +547,13 @@ public class HttpClientUtil {
             e.printStackTrace();
         } catch (IOException e) {
             // 执行httpClient.execute(httpGet)的异常
-            logger.error("asyncProducerAvroToZX is IOException===>>>" + e.getMessage() + "<<<===IOException Message is==>" + dataJson + "<==");//进一步细化日志
+            logger.error("asyncProducerAvroToZX is IOException===>>>" + e.getMessage()
+                    + "<<<===IOException Message is==>" + dataJson + "<==");//进一步细化日志
             e.printStackTrace();
         } catch (Exception e) {
             //handle response here... try other servers
-            logger.error("asyncProducerAvroToZX is Exception===>>>" + e.getMessage() + "<<<===Exception Message is==>" + dataJson + "<==");//进一步细化日志
+            logger.error("asyncProducerAvroToZX is Exception===>>>"
+                    + e.getMessage() + "<<<===Exception Message is==>" + dataJson + "<==");//进一步细化日志
             e.printStackTrace();
         }
     }
@@ -1049,8 +575,7 @@ public class HttpClientUtil {
         }
     }
 
-    private static HashMap<String, Schema> schemaHashMap = new HashMap<String, Schema>();//用于存放Schema
-    private static Logger logger = Logger.getLogger(HttpClientUtil.class);
+
 
     /**
      * 获取数据中的日志标签并将所有相关数据字节数组化后拼接返回

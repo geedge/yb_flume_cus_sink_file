@@ -1,30 +1,22 @@
 package cn.ac.iie.cusflume.sink.CommonUtils;
 
-import cn.ac.iie.cusflume.sink.HttpAsyncUtils.HttpClientFactory;
 import cn.ac.iie.cusflume.sink.HttpAsyncUtils.HttpClientUtil;
-import cn.ac.iie.cusflume.sink.HttpAsyncUtils.msgCallBack.AsyncPostMsgCallBack;
 import cn.ac.iie.cusflume.sink.avroUtils.MD5Utils;
-import com.alibaba.fastjson.JSON;
 import org.apache.http.HttpHeaders;
 import org.apache.http.HttpResponse;
 import org.apache.http.client.ClientProtocolException;
 import org.apache.http.client.ResponseHandler;
 import org.apache.http.client.config.RequestConfig;
 import org.apache.http.client.methods.HttpPost;
-import org.apache.http.client.methods.HttpRequestBase;
 import org.apache.http.entity.ByteArrayEntity;
 import org.apache.http.impl.client.CloseableHttpClient;
 import org.apache.http.impl.client.HttpClients;
 import org.apache.http.impl.conn.PoolingHttpClientConnectionManager;
-import org.apache.http.impl.nio.client.CloseableHttpAsyncClient;
-import org.apache.http.protocol.HTTP;
 import org.apache.http.util.EntityUtils;
 import org.apache.log4j.Logger;
 import org.mortbay.log.Log;
-import scala.util.Try;
 
 import java.io.IOException;
-import java.net.MalformedURLException;
 
 public class HttpClientTest {
 

@@ -65,7 +65,7 @@ public class AsyncPostMailFilesCallback implements FutureCallback<HttpResponse> 
     public AsyncPostMailFilesCallback(ConfigInfo configInfo, String sendMsg, int count, int isCount, int dealIsCount, LinkedList<String> attachmentsIdList) {
         this.configInfo = configInfo;
         this.postFileUrl = configInfo.getPostFileUrl();
-        this.postMsgUrl = configInfo.getPostMsgUrl();
+        this.postMsgUrl = configInfo.getSingleProduceUrl();
         this.sendMsg = sendMsg;//存放对应于url的数据
         this.count = count;//初始为0
         this.isCount = isCount;//初始总数为url总数
@@ -275,7 +275,7 @@ public class AsyncPostMailFilesCallback implements FutureCallback<HttpResponse> 
                     AvroMonitorTimerTask.msgReadyPostSum++;//多个文件对应一条消息
 
                     //开始推送消息进入总线
-                    ProResBody proResBody = dclAsyncPost.avroDataLoad(configInfo.getPostMsgUrl(), configInfo.getTopicName(), sendMsg, configInfo.getBatchSize(), configInfo.getUserAgent(), configInfo.getMsgSessionCookie());
+                    ProResBody proResBody = dclAsyncPost.avroDataLoad(configInfo.getSingleProduceUrl(), configInfo.getTopicName(), sendMsg, configInfo.getBatchSize(), configInfo.getUserAgent(), configInfo.getMsgSessionCookie());
                     LOG.info("Send message with many fileId to zx over,this responseBody is===>" + proResBody.toString());
                 } else if (dealIsCount < isCount) {//继续发送余下文件流获取id
                     // 注意此处dealIsCount必然是>=1的,所以不需要考虑eml_file,因为eml_file必然已经完成,直接发送attachmentsResultIsList中的流获取id

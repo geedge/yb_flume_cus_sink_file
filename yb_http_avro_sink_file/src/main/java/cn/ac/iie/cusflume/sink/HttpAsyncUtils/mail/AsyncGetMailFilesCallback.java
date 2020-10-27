@@ -52,7 +52,7 @@ public class AsyncGetMailFilesCallback implements FutureCallback<HttpResponse> {
     public AsyncGetMailFilesCallback(ConfigInfo configInfo, String getFileUrl, String sendMsg, AsyncPostMailFilesCallback asyncPostMailFilesCallback, int count, int urlCount, int dealUrlCount, LinkedList<String> attachmentsUrl) {
         this.configInfo = configInfo;
         this.postFileUrl = configInfo.getPostFileUrl();//通过configInfo赋值
-        this.postMsgUrl = configInfo.getPostMsgUrl();//通过configInfo赋值
+        this.postMsgUrl = configInfo.getSingleProduceUrl();//通过configInfo赋值
         this.getFileUrl = getFileUrl;//初次存储的是eml_file_url,后续每次存储的都是当次需要请求的文件路径
         this.sendMsg = sendMsg;
         this.asyncPostMailFilesCallback = asyncPostMailFilesCallback;

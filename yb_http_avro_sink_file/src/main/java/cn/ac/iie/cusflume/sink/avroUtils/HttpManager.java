@@ -32,6 +32,7 @@ import org.apache.http.client.protocol.HttpClientContext;
 import org.apache.http.config.Registry;
 import org.apache.http.config.RegistryBuilder;
 import org.apache.http.conn.ConnectTimeoutException;
+import org.apache.http.conn.ConnectionKeepAliveStrategy;
 import org.apache.http.conn.socket.ConnectionSocketFactory;
 import org.apache.http.conn.socket.PlainConnectionSocketFactory;
 import org.apache.http.conn.ssl.*;
@@ -41,6 +42,8 @@ import org.apache.http.impl.client.CloseableHttpClient;
 import org.apache.http.impl.client.HttpClients;
 import org.apache.http.impl.client.LaxRedirectStrategy;
 import org.apache.http.impl.conn.PoolingHttpClientConnectionManager;
+import org.apache.http.message.BasicHeaderElementIterator;
+import org.apache.http.protocol.HTTP;
 import org.apache.http.protocol.HttpContext;
 import org.apache.http.util.EntityUtils;
 import org.apache.log4j.Logger;
@@ -171,6 +174,21 @@ public class HttpManager {
         // 声明重定向策略对象
         LaxRedirectStrategy redirectStrategy = new LaxRedirectStrategy();
 
+
+        ConnectionKeepAliveStrategy myStrategy = (response, context) -> {
+            HeaderElementIterator it = new BasicHeaderElementIterator
+                    (response.headerIterator(HTTP.CONN_KEEP_ALIVE));
+            while (it.hasNext()) {
+                HeaderElement he = it.nextElement();
+                String param = he.getName();
+                String value = he.getValue();
+                if (value != null && param.equalsIgnoreCase("timeout")) {
+                    return Long.parseLong(value) * 1000;
+                }
+            }
+            return 10 * 1000;//如果没有约定，则默认定义时长为60s
+        };
+
         /**
          * 原版
          */
@@ -179,6 +197,7 @@ public class HttpManager {
                 .setDefaultRequestConfig(requestConfig)
                 .setRedirectStrategy(redirectStrategy)
                 .setRetryHandler(myRetryHandler)
+                .setKeepAliveStrategy(myStrategy)
                 .build();
 
         return httpClient;
@@ -629,6 +648,7 @@ public class HttpManager {
             httpPost.addHeader("User-Agent", userAgent);
             httpPost.addHeader("X-Tag", xTag);//根据最新文档,目前已经不需要此头-20191217
             httpPost.addHeader("Content-Type", "application/json");
+            httpPost.setHeader(HTTP.CONN_DIRECTIVE, HTTP.CONN_KEEP_ALIVE);
             StringEntity payload = new StringEntity(data, Charset.forName("utf-8"));
             //payload.setContentType("text/xml; charset=UTF-8");
             payload.setContentEncoding("utf-8");
@@ -671,14 +691,15 @@ public class HttpManager {
             // 执行httpClient.execute(httpGet)的异常
             e.printStackTrace();
         } finally {
-            if (response != null) {
+            if (null != response) {
                 try {
+                    EntityUtils.consumeQuietly(response.getEntity());
                     response.close();
                 } catch (IOException e) {
-                    e.printStackTrace();
+                    logger.error("释放链接错误: " + e.getMessage());
                 }
             }
-            httpPost.abort();
+            //httpPost.abort();
         }
         return acResBody;
     }

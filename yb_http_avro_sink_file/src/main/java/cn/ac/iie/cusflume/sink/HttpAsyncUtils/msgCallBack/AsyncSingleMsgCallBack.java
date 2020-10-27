@@ -15,14 +15,13 @@ import org.apache.http.util.EntityUtils;
 import org.apache.log4j.Logger;
 
 import java.io.IOException;
-import java.util.Arrays;
 import java.util.Map;
 
 /**
  * 被回调的对象，给异步的httpclient使用
  */
-public class AsyncPostMsgCallBack implements FutureCallback<HttpResponse> {
-    private static Logger logger = Logger.getLogger(AsyncPostMsgCallBack.class);
+public class AsyncSingleMsgCallBack implements FutureCallback<HttpResponse> {
+    private static Logger logger = Logger.getLogger(AsyncSingleMsgCallBack.class);
 
     private String postMsgUrl;
     private String topicName;
@@ -32,7 +31,7 @@ public class AsyncPostMsgCallBack implements FutureCallback<HttpResponse> {
     private int count;
     private long postTime;
 
-    public AsyncPostMsgCallBack(String postMsgUrl, String topicName, String dataJson, String userAgent, String msgSessionCookie, int count, long postTime) {
+    public AsyncSingleMsgCallBack(String postMsgUrl, String topicName, String dataJson, String userAgent, String msgSessionCookie, int count, long postTime) {
         this.postMsgUrl = postMsgUrl;
         this.topicName = topicName;
         this.dataJson = dataJson;
@@ -103,7 +102,6 @@ public class AsyncPostMsgCallBack implements FutureCallback<HttpResponse> {
      */
     @Override
     public void completed(HttpResponse response) {
-//        ProResBody proResBody = null;
         try {
             int statusCode = response.getStatusLine().getStatusCode();
             HttpEntity entity = response.getEntity();
@@ -121,11 +119,7 @@ public class AsyncPostMsgCallBack implements FutureCallback<HttpResponse> {
             if (map != null) {
                 resRedirBodyCode = (int) map.get("code");
             }
-//            int resRedirBodyCode = resRedirBody.getCode();
 
-          /*  logger.debug("生产数据==>" + dataJson + "<==," +
-                    "生产数据checksum==>" + MD5Utils.md5Encode(dataJson) + "<==," +
-                    "返回的生产原始响应体String数据为:" + ret);*/
             /**
              * 20200818-接口细化响应码
              */
@@ -137,12 +131,11 @@ public class AsyncPostMsgCallBack implements FutureCallback<HttpResponse> {
                         "数据加载成功,返回码: " + statusCode);
 
                 AvroMonitorTimerTask.addSuccessNum(count);
-
             } else {
                 AvroMonitorTimerTask.addFailedNum(count);
                 switch (resRedirBodyCode) {
                     case 300:
-                        logger.info("AsyncPostMsgCallBack==>重定向响应体-redirect-ret==>" + ret
+                        logger.error("AsyncSingleMsgCallBack==>重定向响应体-redirect-ret==>" + ret
                                 + "服务端响应时间(ms)==>" + (System.currentTimeMillis() - postTime) + "<==,"
                                 + "<==,Status Code:" + statusCode + ",resRedirBodyCode:300,当前服务节点负载过高,将向其他通信地址发送请求.");
                         //若不包含对应字段，则不进行对象转换，减少报错
@@ -153,33 +146,35 @@ public class AsyncPostMsgCallBack implements FutureCallback<HttpResponse> {
                                 YbHttpAvroSinkFile.changeUrl(redirectUrl);
                             }
                         } else {
-                            logger.error("AsyncPostMsgCallBack==>服务端响应体中ResRedirBody.data.redirect字段不存在或格式不正确!!!");
+                            logger.error("AsyncSingleMsgCallBack==>服务端响应体中ResRedirBody.data.redirect字段不存在或格式不正确!!!");
                         }
 
-                        YbHttpAvroSinkFile.redirectContents.add(dataJson);
+                        HttpClientUtil.getRetryQueue().put(dataJson);
                         break;
                     case 301:
-                        logger.info("AsyncPostMsgCallBack==>Status Code:" + statusCode
+                        logger.error("AsyncSingleMsgCallBack==>Status Code:" + statusCode
                                 + "服务端响应时间(ms)==>" + (System.currentTimeMillis() - postTime) + "<==,"
                                 + ",resRedirBodyCode:301,当前所有服务端节点均负载过高,暂无可用资源,请等待.");
-                        YbHttpAvroSinkFile.redirectContents.add(dataJson);
+                        HttpClientUtil.getRetryQueue().put(dataJson);
                         break;
                     case 410:
-                        logger.info("AsyncPostMsgCallBack==>Status Code:" + statusCode
+                        logger.error("AsyncSingleMsgCallBack==>Status Code:" + statusCode
                                 + "服务端响应时间(ms)==>" + (System.currentTimeMillis() - postTime) + "<==,"
                                 + ",resRedirBodyCode:410,Cookie已过期或Cookie错误,将开始更新Cookie.");
                         YbHttpAvroSinkFile.updateCookie();
                         break;
                     case 500:
-                        logger.info("AsyncPostMsgCallBack==>Status Code:" + statusCode
+                        logger.error("AsyncSingleMsgCallBack==>Status Code:" + statusCode
                                 + "服务端响应时间(ms)==>" + (System.currentTimeMillis() - postTime) + "<==,"
                                 + ",resRedirBodyCode:500,处理请求过程出现系统错误.");
                         YbHttpAvroSinkFile.updateCookie();
                         break;
                     default:
-                        logger.error("AsyncPostMsgCallBack==>数据加载失败,响应体:" + ret
+
+                        logger.error("AsyncSingleMsgCallBack==>数据加载失败,响应体:" + ret
                                 + "服务端响应时间(ms)==>" + (System.currentTimeMillis() - postTime) + "<==,"
                                 + "---Status Code:" + statusCode + "---resRedirBodyCode:" + resRedirBodyCode);
+
                         break;
                 }
             }
@@ -188,11 +183,12 @@ public class AsyncPostMsgCallBack implements FutureCallback<HttpResponse> {
                 try {
                     EntityUtils.consume(entity);
                 } catch (final IOException ex) {
+                    logger.error("IOException : " + ex);
                 }
             }
 
         } catch (Exception e) {
-            logger.error("AsyncPostMsgCallBack Get response from ZX is error===>>>" + e.getMessage() + "<<<===Message is==>" + dataJson + "<==");//细化日志
+            logger.error("AsyncSingleMsgCallBack Get response from ZX is error===>>>" + e.getMessage() + "<<<===Message is==>" + dataJson + "<==");//细化日志
             e.printStackTrace();
         } finally {
             HttpClientUtils.closeQuietly(response);
@@ -204,7 +200,7 @@ public class AsyncPostMsgCallBack implements FutureCallback<HttpResponse> {
      */
     @Override
     public void cancelled() {
-        logger.error("AsyncPostMagCallBack Request is cancelled");
+        logger.error("AsyncSingleMsgCallBack Request is cancelled");
     }
 
     /**
@@ -212,15 +208,8 @@ public class AsyncPostMsgCallBack implements FutureCallback<HttpResponse> {
      */
     @Override
     public void failed(Exception e) {
-        count++;
-        logger.info("AsyncPostMagCallBack Request is Failed,This Failed data is ==>" + dataJson + "<==,Retry count=" + count);
-        if (count > 1) {
-
-            AvroMonitorTimerTask.addFailedNum(1);
-            logger.error("dataJson:" + dataJson + " send failed finally,error:" + e.toString());
-        } else {
-            HttpClientUtil.asyncProducerAvroToZX(postMsgUrl, topicName, dataJson, userAgent, msgSessionCookie, count, System.currentTimeMillis());//failed失败时重试
-        }
+        logger.error("AsyncSingleMsgCallBack Request is Failed,This Failed data is ==>"
+                    + dataJson );
     }
 
 }

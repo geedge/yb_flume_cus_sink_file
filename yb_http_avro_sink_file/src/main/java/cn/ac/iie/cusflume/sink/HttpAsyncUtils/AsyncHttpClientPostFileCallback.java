@@ -58,7 +58,7 @@ public class AsyncHttpClientPostFileCallback implements FutureCallback<HttpRespo
     public AsyncHttpClientPostFileCallback(ConfigInfo configInfo, String sendMsg, int count) {
         this.configInfo = configInfo;
         this.postFileUrl = configInfo.getPostFileUrl();
-        this.postMsgUrl = configInfo.getPostMsgUrl();
+        this.postMsgUrl = configInfo.getSingleProduceUrl();
         this.sendMsg = sendMsg;//存放对应于url的数据
         this.count = count;
 
