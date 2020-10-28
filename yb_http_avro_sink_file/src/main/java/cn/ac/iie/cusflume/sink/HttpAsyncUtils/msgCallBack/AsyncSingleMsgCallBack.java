@@ -208,6 +208,7 @@ public class AsyncSingleMsgCallBack implements FutureCallback<HttpResponse> {
      */
     @Override
     public void failed(Exception e) {
+        AvroMonitorTimerTask.addFailedNum(count);
         logger.error("AsyncSingleMsgCallBack Request is Failed,This Failed data is ==>"
                     + dataJson );
     }

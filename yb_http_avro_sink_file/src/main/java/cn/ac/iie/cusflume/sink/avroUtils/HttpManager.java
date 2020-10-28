@@ -175,7 +175,7 @@ public class HttpManager {
         LaxRedirectStrategy redirectStrategy = new LaxRedirectStrategy();
 
 
-        ConnectionKeepAliveStrategy myStrategy = (response, context) -> {
+       /* ConnectionKeepAliveStrategy myStrategy = (response, context) -> {
             HeaderElementIterator it = new BasicHeaderElementIterator
                     (response.headerIterator(HTTP.CONN_KEEP_ALIVE));
             while (it.hasNext()) {
@@ -187,7 +187,7 @@ public class HttpManager {
                 }
             }
             return 10 * 1000;//如果没有约定，则默认定义时长为60s
-        };
+        };*/
 
         /**
          * 原版
@@ -197,7 +197,7 @@ public class HttpManager {
                 .setDefaultRequestConfig(requestConfig)
                 .setRedirectStrategy(redirectStrategy)
                 .setRetryHandler(myRetryHandler)
-                .setKeepAliveStrategy(myStrategy)
+               // .setKeepAliveStrategy(myStrategy)
                 .build();
 
         return httpClient;
@@ -648,7 +648,7 @@ public class HttpManager {
             httpPost.addHeader("User-Agent", userAgent);
             httpPost.addHeader("X-Tag", xTag);//根据最新文档,目前已经不需要此头-20191217
             httpPost.addHeader("Content-Type", "application/json");
-            httpPost.setHeader(HTTP.CONN_DIRECTIVE, HTTP.CONN_KEEP_ALIVE);
+           // httpPost.setHeader(HTTP.CONN_DIRECTIVE, HTTP.CONN_KEEP_ALIVE);
             StringEntity payload = new StringEntity(data, Charset.forName("utf-8"));
             //payload.setContentType("text/xml; charset=UTF-8");
             payload.setContentEncoding("utf-8");
@@ -699,7 +699,7 @@ public class HttpManager {
                     logger.error("释放链接错误: " + e.getMessage());
                 }
             }
-            //httpPost.abort();
+            httpPost.abort();
         }
         return acResBody;
     }

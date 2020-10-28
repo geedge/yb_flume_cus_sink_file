@@ -194,6 +194,7 @@ public class AsyncBatchMsgCallBack implements FutureCallback<HttpResponse> {
      */
     @Override
     public void failed(Exception e) {
+        AvroMonitorTimerTask.addFailedNum(count);
         logger.error("AsyncPostMagCallBack Request is Failed,This Failed data checksum is ==>"+ checksum);
     }
 
