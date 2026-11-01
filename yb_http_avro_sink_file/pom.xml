@@ -28,7 +28,7 @@
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <flume.version>1.9.0</flume.version>
-        <kafka.version>1.0.0</kafka.version>
+        <kafka.version>2.4.1</kafka.version>
     </properties>
 
     <build>
@@ -151,7 +151,7 @@
         <dependency>
             <groupId>com.alibaba</groupId>
             <artifactId>fastjson</artifactId>
-            <version>1.2.47</version>
+            <version>1.2.84</version>
         </dependency>
 
         <!--flume官方版jar包-->
@@ -242,7 +242,7 @@
         <dependency>
             <groupId>org.apache.httpcomponents</groupId>
             <artifactId>httpclient</artifactId>
-            <version>4.5.2</version>
+            <version>4.5.13</version>
         </dependency>
         <dependency>
             <groupId>org.apache.httpcomponents</groupId>
@@ -264,13 +264,13 @@
         <dependency>
             <groupId>com.squareup.okhttp3</groupId>
             <artifactId>okhttp</artifactId>
-            <version>3.9.0</version>
+            <version>4.9.2</version>
         </dependency>
 
         <dependency>
             <groupId>commons-io</groupId>
             <artifactId>commons-io</artifactId>
-            <version>2.4</version>
+            <version>2.14.0</version>
         </dependency>
 
         <dependency>
